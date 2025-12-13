@@ -1,0 +1,18 @@
+includes:
+  - ./vendor/larastan/larastan/extension.neon
+
+parameters:
+  level: 5
+
+  paths:
+    - app
+    - routes
+
+  ignoreErrors:
+    - '#Property .+ does not accept null#'
+
+  reportUnmatchedIgnoredErrors: false
+
+  # Autoload per Laravel
+  scanFiles:
+    - bootstrap/app.php

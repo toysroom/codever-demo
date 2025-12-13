@@ -1,0 +1,119 @@
+services:
+  app:
+    build:
+      context: ./php
+      dockerfile: Dockerfile
+    image: zelante-php
+    container_name: zelante-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    ports:
+      - "8473:5173"
+    volumes:
+      - ./src:/var/www/html
+      - composer_cache:/tmp/composer
+    environment:
+      PHP_IDE_CONFIG: "serverName=zelante"
+    depends_on:
+      - mysql
+    networks:
+      - zelante
+
+  nginx:
+    image: nginx:alpine
+    container_name: zelante-nginx
+    ports:
+      - 8480:80
+    volumes:
+      - ./src:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    environment:
+      - SHELL=/bin/bash
+    networks:
+      - zelante
+
+  mysql:
+    image: mysql:8.4
+    container_name: zelante-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: zelante
+      MYSQL_USER: zelante
+      MYSQL_PASSWORD: zelante
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d
+    networks:
+      - zelante
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    container_name: zelante-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: root
+    ports:
+      - "8481:80"
+    depends_on:
+      - mysql
+    networks:
+      - zelante
+
+
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: zelante-jenkins
+    restart: unless-stopped
+    privileged: true
+    user: root
+    ports:
+      - "8492:8080"
+    volumes:
+      - ./jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOCKER_BUILDKIT=1
+      - SHELL=/bin/bash
+    networks:
+      - zelante
+    command: >
+      bash -c "
+        # Install Docker CLI and FTP tools
+        apt-get update &&
+        apt-get install -y docker.io lftp bash &&
+        rm -rf /var/lib/apt/lists/* &&
+        # Start Jenkins
+        /usr/local/bin/jenkins.sh
+      "
+  # redis:
+  #   image: redis:7
+  #   container_name: zelante-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - zelante
+
+  # mailpit:
+  #   image: axllent/mailpit:latest
+  #   container_name: zelante-mailpit
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8025:8025"
+  #     - "1025:1025"
+  #   networks:
+  #     - zelante
+
+volumes:
+  mysql_data:
+  jenkins_home:
+  composer_cache:
+
+networks:
+  zelante:
+    driver: bridge
