@@ -90,29 +90,33 @@ services:
         # Start Jenkins
         /usr/local/bin/jenkins.sh
       "
-  # redis:
-  #   image: redis:7
-  #   container_name: zelante-redis
-  #   restart: unless-stopped
-  #   ports:
-  #     - "6379:6379"
-  #   networks:
-  #     - zelante
+  redis:
+    image: redis:7-alpine
+    container_name: zelante-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - zelante
+    command: redis-server --appendonly yes
 
-  # mailpit:
-  #   image: axllent/mailpit:latest
-  #   container_name: zelante-mailpit
-  #   restart: unless-stopped
-  #   ports:
-  #     - "8025:8025"
-  #     - "1025:1025"
-  #   networks:
-  #     - zelante
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: zelante-mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP
+    networks:
+      - zelante
 
 volumes:
   mysql_data:
   jenkins_home:
   composer_cache:
+  redis_data:
 
 networks:
   zelante:

@@ -1,0 +1,1208 @@
+---
+alwaysApply: true
+---
+
+# Regole Backend Laravel - Progetto Zelante
+
+Queste regole si aggiungono a quelle di Laravel Boost e sono specifiche per lo sviluppo backend del progetto.
+
+**Nota**: 
+- Per l'architettura degli utenti (Members e Customers), vedere il file `user-architecture.mdc` nella stessa directory.
+- Per le regole frontend, vedere il file `frontend-rules.mdc` nella stessa directory.
+- Questo progetto (`zelante-app`) gestisce SOLO l'applicazione su `app.zelante.it`. Il sito vetrina `www.zelante.it` è un progetto separato che condivide solo il database.
+
+## Soft Deletes
+
+- **SEMPRE** usare Soft Deletes in tutti i Model Laravel
+- Aggiungere il trait `SoftDeletes` ai Model: `use Illuminate\Database\Eloquent\SoftDeletes;`
+- Includere `use SoftDeletes;` nella classe del Model
+- Creare sempre la migration per la colonna `deleted_at`: `$table->softDeletes();`
+- Usare `deleted_at` per tutte le query che devono escludere i record eliminati
+- Quando si fa restore, verificare sempre che il record non violi vincoli unici
+
+## Pattern Service-Repository
+
+- **SEMPRE** usare il pattern Service-Repository per la logica di business
+- I **Repository** devono contenere SOLO la logica di accesso ai dati (CRUD, query)
+- I **Service** devono contenere la logica di business e orchestrazione
+- I **Controller** devono essere snelli e delegare ai Service
+- Struttura consigliata:
+  ```
+  app/
+    Repositories/
+      BaseRepository.php (interfaccia/abstract)
+      ModelNameRepository.php
+      Interfaces/
+        ModelNameRepositoryInterface.php
+    Services/
+      ModelNameService.php
+  ```
+- I Repository devono implementare un'interfaccia per permettere dependency injection e testing
+- I Service devono iniettare i Repository via constructor injection
+- I Controller devono iniettare i Service via constructor injection
+
+## Migrations
+
+- **Charset e Collation**: Usare sempre charset e collation che supportano tutte le lingue:
+  ```php
+  $table->charset = 'utf8mb4';
+  $table->collation = 'utf8mb4_unicode_ci';
+  ```
+  Oppure per tutto il database:
+  ```php
+  Schema::defaultStringLength(191);
+  // E nel metodo up() all'inizio:
+  DB::statement('ALTER DATABASE ' . DB::getDatabaseName() . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;');
+  ```
+
+- **Struttura della Migration**: 
+  - Prima: definizione di tutti i campi (colonne)
+  - Poi: definizione degli indici (indexes)
+  - Infine: definizione dei vincoli (constraints: foreign keys, unique, check, ecc.)
+  
+  Esempio:
+  ```php
+  public function up(): void
+  {
+      Schema::create('users', function (Blueprint $table) {
+          // 1. DEFINIZIONE CAMPI
+          $table->id();
+          $table->string('name');
+          $table->string('email');
+          $table->timestamp('email_verified_at')->nullable();
+          $table->string('password');
+          $table->rememberToken();
+          $table->timestamps();
+          $table->softDeletes();
+          
+          // 2. INDICI
+          $table->index('email');
+          $table->index('deleted_at');
+          
+          // 3. VINCOLI
+          $table->unique('email');
+          $table->foreign('role_id')->references('id')->on('roles')->onDelete('cascade');
+      });
+  }
+  ```
+
+## Activity Log (Spatie)
+
+- **SEMPRE** usare Activity Log di Spatie in:
+  - Tutti i Model
+  - Tutti i Service
+  - Tutti i Repository
+  - Tutti i Controller
+
+- **Nota**: Per eventi critici di business (cambio piano, cancellazioni definitive, eventi finanziari), considerare anche Event Sourcing (vedi user-architecture.mdc)
+
+- Nei **Model**: aggiungere il trait `LogsActivity`
+  ```php
+  use Spatie\Activitylog\Traits\LogsActivity;
+  use Spatie\Activitylog\LogOptions;
+  
+  class ModelName extends Model
+  {
+      use LogsActivity, SoftDeletes;
+      
+      public function getActivitylogOptions(): LogOptions
+      {
+          return LogOptions::defaults()
+              ->logOnly(['column1', 'column2'])
+              ->logOnlyDirty()
+              ->dontSubmitEmptyLogs();
+      }
+  }
+  ```
+
+- Nei **Service, Repository e Controller**: loggare le operazioni importanti
+  ```php
+  activity()
+      ->performedOn($model)
+      ->causedBy(auth()->user())
+      ->withProperties(['key' => 'value'])
+      ->log('description of the activity');
+  ```
+
+- Loggare sempre: creazioni, modifiche, eliminazioni, azioni importanti
+- Usare `logOnly()` e `logOnlyDirty()` per ottimizzare
+- Non loggare dati sensibili (password, token, ecc.)
+
+## Gestione Errori e Transazioni
+
+- **SEMPRE** usare try-catch per operazioni che possono fallire
+- **SEMPRE** usare transazioni DB per operazioni che coinvolgono più query/modifiche:
+  ```php
+  DB::transaction(function () {
+      // operazioni multiple
+      $model1->save();
+      $model2->save();
+      // se qualcosa fallisce, tutto viene rollback
+  });
+  ```
+
+- Usare transazioni quando:
+  - Si creano/modificano più modelli correlati
+  - Si fanno operazioni che devono essere atomiche
+  - Si hanno operazioni che devono essere consistenti insieme
+
+- Pattern consigliato:
+  ```php
+  try {
+      DB::beginTransaction();
+      
+      // operazioni
+      
+      DB::commit();
+  } catch (\Exception $e) {
+      DB::rollBack();
+      throw $e; // o gestire l'errore appropriatamente
+  }
+  ```
+
+## Eccezioni Custom
+
+- Creare eccezioni custom per casi d'uso specifici in `app/Exceptions/`
+- Rilanciare eccezioni custom invece di generiche quando appropriato
+- Esempi:
+  ```php
+  app/Exceptions/
+    ModelNotFoundException.php
+    UnauthorizedActionException.php
+    BusinessLogicException.php
+  ```
+
+- Gestire le eccezioni globalmente in `app/Exceptions/Handler.php`
+- Usare `report()` per loggare e `render()` per risposte HTTP appropriate
+- Mappare eccezioni custom a codici HTTP e messaggi appropriati
+- Non esporre dettagli tecnici agli utenti finali
+
+## Permessi e Middleware (Spatie Permission)
+
+- **SEMPRE** usare i middleware di Spatie Permission a livello di Controller
+- Non usare `@can` nelle viste per controlli critici (usare solo per UI)
+- I controlli di autorizzazione devono essere sempre nel backend
+- Vedere la sezione "Pattern Controller Standard" per il pattern da seguire obbligatoriamente
+
+- Verificare sempre i permessi anche nei Service quando necessario (doppio controllo)
+- Usare `authorize()` di Laravel in combinazione con Policy quando serve logica complessa
+- Non fare affidamento solo sui middleware, verificare anche nella logica di business
+
+## Permessi Standard per Dominio
+
+- **SEMPRE** creare i seguenti permessi standard per ogni dominio/modulo:
+  - `{domain}.index` - per visualizzare la lista
+  - `{domain}.store` - per creare nuovi record (incluso in `create`)
+  - `{domain}.show` - per visualizzare un singolo record
+  - `{domain}.update` - per modificare record (incluso in `edit`)
+  - `{domain}.destroy` - per eliminare record
+  - `{domain}.export` - per esportare dati
+
+- **IMPORTANTE**: Usare sempre il punto (.) come separatore tra dominio e permesso
+- Esempio di naming: se il dominio è "cargo_provider", i permessi saranno:
+  - `cargo_provider.index`
+  - `cargo_provider.create` (usato per create/store)
+  - `cargo_provider.show`
+  - `cargo_provider.edit` (usato per edit/update)
+  - `cargo_provider.destroy`
+  - `cargo_provider.export`
+
+## Permessi Web vs API
+
+- **DI DEFAULT**: Usare permessi unificati (`{domain}.index`) che funzionano sia per web che per API
+  - Un permesso rappresenta l'accesso a una risorsa indipendentemente dal canale
+  - Più semplice da gestire e mantenere
+  - Adeguato per la maggior parte dei casi d'uso
+
+- **Separazione Web/API solo quando necessario**:
+  - Usare prefissi `web` o `api` solo se hai requisiti specifici che richiedono controlli diversi tra web e API
+  - Esempi di casi validi:
+    - Utenti che possono accedere via web ma non via API (o viceversa)
+    - Token API con scope diversi rispetto ai permessi web
+    - Rate limiting o logica di autorizzazione diversa per API
+  
+- **Pattern per permessi separati** (solo se necessario):
+  - Web: `{domain}.web.index`, `{domain}.web.create`, ecc.
+  - API: `{domain}.api.index`, `{domain}.api.create`, ecc.
+  
+- **Pattern per permessi unificati** (consigliato, default):
+  - Unico: `{domain}.index`, `{domain}.create`, ecc.
+  - Stesso permesso controlla l'accesso sia per web che per API
+  - Eventuali differenze gestite tramite middleware specifici o logica nel controller
+
+## Pattern Controller Standard
+
+- **SEMPRE** seguire questo pattern per tutti i Controller:
+
+  ```php
+  <?php
+
+  namespace App\Http\Controllers;
+
+  use Illuminate\Routing\Controllers\HasMiddleware;
+  use Illuminate\Routing\Controllers\Middleware;
+
+  class CargoProviderController extends Controller implements HasMiddleware
+  {
+      // Prefisso per i permessi (gate)
+      private static string $GATE_PREFIX = 'cargo_provider';
+
+      // Prefisso per le viste Blade/Inertia
+      private string $VIEW_PREFIX = 'CargoProviders';
+
+      // Prefisso per le rotte (kebab-case)
+      private string $ROUTE_PREFIX = 'cargo-providers';
+
+      // Prefisso per le traduzioni (snake_case)
+      private string $LANG_PREFIX = 'cargo_providers';
+
+      /**
+       * Definizione middleware usando il trait HasMiddleware
+       */
+      public static function middleware(): array
+      {
+          return [
+              new Middleware('permission:'.self::$GATE_PREFIX.'.index', only: ['index']),
+              new Middleware('permission:'.self::$GATE_PREFIX.'.create', only: ['create', 'store']),
+              new Middleware('permission:'.self::$GATE_PREFIX.'.show', only: ['show']),
+              new Middleware('permission:'.self::$GATE_PREFIX.'.edit', only: ['edit', 'update', 'toggleActive']),
+              new Middleware('permission:'.self::$GATE_PREFIX.'.destroy', only: ['destroy']),
+              new Middleware('permission:'.self::$GATE_PREFIX.'.export', only: ['export']),
+          ];
+      }
+
+      // ... metodi del controller
+  }
+  ```
+
+- **REGOLE IMPORTANTI**:
+  - `GATE_PREFIX` deve essere in snake_case (es: `cargo_provider`)
+  - `VIEW_PREFIX` deve essere in PascalCase (es: `CargoProviders`)
+  - `ROUTE_PREFIX` deve essere in kebab-case (es: `cargo-providers`)
+  - `LANG_PREFIX` deve essere in snake_case (es: `cargo_providers`)
+  - Il Controller deve implementare `HasMiddleware` da `Illuminate\Routing\Controllers\HasMiddleware`
+  - Il metodo `middleware()` deve essere statico e restituire un array di `Middleware`
+  - Mappare sempre i permessi alle azioni appropriate usando il punto (.) come separatore:
+    - `index` → `.index`
+    - `create, store` → `.create`
+    - `show` → `.show`
+    - `edit, update, toggleActive` → `.edit`
+    - `destroy` → `.destroy`
+    - `export` → `.export`
+  - Per controller API: se usi permessi separati, aggiungi il prefisso `.api` (es: `cargo_provider.api.index`)
+  - Per controller Web: se usi permessi separati, aggiungi il prefisso `.web` (es: `cargo_provider.web.index`)
+  - **Consiglio**: Usa permessi unificati di default; separa solo se hai requisiti specifici che lo giustificano
+
+## Testing - Unit e Feature Tests
+
+- **SEMPRE** creare e mantenere test per ogni dominio/modulo sviluppato
+- Ogni dominio deve avere sia **Unit Tests** che **Feature Tests**
+- Usare **Pest** per tutti i test (già configurato nel progetto)
+
+### Struttura Test per Dominio
+
+Per ogni dominio (es: `cargo_provider`), creare:
+
+```
+tests/
+  Unit/
+    CargoProvider/
+      CargoProviderTest.php
+      CargoProviderRepositoryTest.php
+      CargoProviderServiceTest.php
+  Feature/
+    CargoProvider/
+      CargoProviderIndexTest.php
+      CargoProviderStoreTest.php
+      CargoProviderShowTest.php
+      CargoProviderUpdateTest.php
+      CargoProviderDestroyTest.php
+      CargoProviderExportTest.php
+```
+
+### Unit Tests
+
+**Cosa testare:**
+- Repository: metodi CRUD, query, filtri
+- Service: logica di business, validazioni, calcoli
+- Model: accessors, mutators, relazioni, scope
+- Helper/Utility: funzioni pure, trasformazioni dati
+
+**Esempio struttura Unit Test:**
+```php
+<?php
+
+use Tests\TestCase;
+use App\Models\CargoProvider;
+use App\Repositories\CargoProviderRepository;
+use App\Services\CargoProviderService;
+
+test('repository can find cargo provider by id', function () {
+    $cargoProvider = CargoProvider::factory()->create();
+    
+    $repository = new CargoProviderRepository();
+    $found = $repository->find($cargoProvider->id);
+    
+    expect($found)->not->toBeNull()
+        ->and($found->id)->toBe($cargoProvider->id);
+});
+
+test('service validates required fields before creating', function () {
+    $service = new CargoProviderService();
+    
+    expect(fn() => $service->create([]))
+        ->toThrow(ValidationException::class);
+});
+```
+
+### Feature Tests
+
+**Cosa testare:**
+- Controller: tutte le route e azioni CRUD
+- Permessi: verifica middleware e autorizzazioni
+- Multi-tenancy: isolamento dati per tenant
+- API responses: status codes, struttura JSON
+- Integrazioni: interazione tra Service e Repository
+
+**Per ogni dominio, testare TUTTE le azioni:**
+- `index` - lista con filtri, paginazione, permessi
+- `store` - creazione con validazione, permessi
+- `show` - visualizzazione singolo record, permessi
+- `update` - modifica con validazione, permessi
+- `destroy` - eliminazione (soft delete), permessi
+- `export` - export dati, permessi
+
+**Esempio struttura Feature Test:**
+```php
+<?php
+
+use Tests\TestCase;
+use App\Models\User;
+use App\Models\Member;
+use App\Models\CargoProvider;
+
+use function Pest\Laravel\{actingAs, get, post, put, delete};
+
+beforeEach(function () {
+    $this->owner = User::factory()->memberOwner()->create();
+    $this->subMember = User::factory()->subMember()->create([
+        'parent_member_id' => $this->owner->member->id
+    ]);
+    $this->customer = User::factory()->customer()->create([
+        'member_id' => $this->owner->member->id
+    ]);
+});
+
+test('member owner can view cargo providers index', function () {
+    CargoProvider::factory()->count(5)->create([
+        'member_id' => $this->owner->member->id
+    ]);
+    
+    actingAs($this->owner)
+        ->get(route('cargo-providers.index'))
+        ->assertOk()
+        ->assertJsonCount(5, 'data');
+});
+
+test('sub member without permission cannot create cargo provider', function () {
+    // Setup: sub member senza permesso create
+    $this->subMember->member->update([
+        'permissions' => [
+            'domains' => [
+                'cargo_provider' => [
+                    'index' => true,
+                    'create' => false, // senza permesso
+                ]
+            ]
+        ]
+    ]);
+    
+    actingAs($this->subMember)
+        ->post(route('cargo-providers.store'), [])
+        ->assertForbidden();
+});
+
+test('customer cannot access cargo providers', function () {
+    actingAs($this->customer)
+        ->get(route('cargo-providers.index'))
+        ->assertForbidden();
+});
+```
+
+### Regole Obbligatorie per Test
+
+1. **Coverage minima**: Ogni dominio deve avere almeno:
+   - Test per tutte le azioni CRUD (index, store, show, update, destroy, export)
+   - Test per permessi (owner, sub-member con/senza permessi, customer)
+   - Test per multi-tenancy (isolamento dati)
+
+2. **Aggiornamento continuo**: 
+   - Quando si aggiunge una nuova funzionalità → aggiungere test
+   - Quando si modifica logica esistente → aggiornare test esistenti
+   - Quando si fixa un bug → aggiungere test regression
+
+3. **Setup e TearDown**:
+   - Usare `beforeEach()` per setup comune
+   - Usare factories per creare dati di test
+   - Pulire i dati dopo ogni test (automatico con Pest/Laravel)
+
+4. **Multi-Tenancy nei Test**:
+   ```php
+   test('user can only see cargo providers of their tenant', function () {
+       $owner1 = User::factory()->memberOwner()->create();
+       $owner2 = User::factory()->memberOwner()->create();
+       
+       $cargo1 = CargoProvider::factory()->create(['member_id' => $owner1->member->id]);
+       $cargo2 = CargoProvider::factory()->create(['member_id' => $owner2->member->id]);
+       
+       actingAs($owner1)
+           ->get(route('cargo-providers.index'))
+           ->assertJsonPath('data.0.id', $cargo1->id)
+           ->assertJsonMissing(['id' => $cargo2->id]);
+   });
+   ```
+
+5. **Test Permessi**:
+   ```php
+   test('sub member with permission can create cargo provider', function () {
+       // Setup permessi
+       $this->subMember->member->update([
+           'permissions' => [
+               'domains' => ['cargo_provider' => ['create' => true]]
+           ]
+       ]);
+       
+       actingAs($this->subMember)
+           ->post(route('cargo-providers.store'), [
+               'name' => 'Test Provider',
+               // altri campi obbligatori
+           ])
+           ->assertCreated();
+   });
+   ```
+
+6. **Test Soft Delete**:
+   ```php
+   test('soft delete cargo provider does not permanently remove it', function () {
+       $cargo = CargoProvider::factory()->create();
+       
+       actingAs($this->owner)
+           ->delete(route('cargo-providers.destroy', $cargo))
+           ->assertOk();
+       
+       expect(CargoProvider::withTrashed()->find($cargo->id))->not->toBeNull()
+           ->and(CargoProvider::find($cargo->id))->toBeNull();
+   });
+   ```
+
+### Comandi Test
+
+- Eseguire tutti i test: `make test` o `php artisan test`
+- Test specifico dominio: `php artisan test --filter=CargoProvider`
+- Test unit: `php artisan test --testsuite=Unit`
+- Test feature: `php artisan test --testsuite=Feature`
+- Con coverage: `php artisan test --coverage`
+
+### Checklist per Nuovo Dominio
+
+Quando si crea un nuovo dominio, assicurarsi di:
+
+- [ ] Creare repository con interfaccia
+- [ ] Creare service
+- [ ] Creare controller con middleware permessi
+- [ ] Creare model con SoftDeletes e LogsActivity
+- [ ] Creare migration con struttura corretta
+- [ ] Creare factory per test
+- [ ] Creare Unit Tests:
+  - [ ] Repository tests
+  - [ ] Service tests
+  - [ ] Model tests
+- [ ] Creare Feature Tests:
+  - [ ] Index test
+  - [ ] Store test
+  - [ ] Show test
+  - [ ] Update test
+  - [ ] Destroy test
+  - [ ] Export test (se applicabile)
+  - [ ] Permission tests (owner, sub-member, customer)
+  - [ ] Multi-tenancy tests
+- [ ] Verificare che tutti i test passino
+- [ ] Aggiornare documentazione se necessario
+
+## API Resources e Formattazione Risposte
+
+- **SEMPRE** usare API Resources di Laravel per standardizzare le risposte API
+- Non restituire mai direttamente i modelli Eloquent nelle risposte API
+- Creare un Resource per ogni entità esposta via API
+
+**Struttura:**
+```
+app/Http/Resources/
+  CargoProviderResource.php
+  CargoProviderCollection.php (per liste)
+```
+
+**Esempio:**
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class CargoProviderResource extends JsonResource
+{
+    public function toArray($request): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'email' => $this->email,
+            'created_at' => $this->created_at->toIso8601String(),
+            'updated_at' => $this->updated_at->toIso8601String(),
+            // Relazioni opzionali
+            'member' => new MemberResource($this->whenLoaded('member')),
+        ];
+    }
+}
+
+// Nel Controller
+return new CargoProviderResource($cargoProvider);
+return CargoProviderResource::collection($cargoProviders); // per liste
+```
+
+## Form Requests e Validazione
+
+- **SEMPRE** usare Form Requests per validare input invece di validare nei Controller
+- Creare Form Request separati per ogni azione (Store, Update, ecc.)
+
+**Struttura:**
+```
+app/Http/Requests/
+  CargoProvider/
+    StoreCargoProviderRequest.php
+    UpdateCargoProviderRequest.php
+```
+
+**Esempio:**
+```php
+<?php
+
+namespace App\Http\Requests\CargoProvider;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreCargoProviderRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return $this->user()->can('cargo_provider.create');
+    }
+
+    public function rules(): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'unique:cargo_providers,email'],
+            'phone' => ['nullable', 'string', 'max:20'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'name.required' => 'Il nome è obbligatorio',
+            'email.unique' => 'Questa email è già registrata',
+        ];
+    }
+}
+```
+
+## Standardizzazione Risposte API
+
+- **SEMPRE** usare un formato standard per tutte le risposte API
+- Creare un Trait o Helper per risposte consistenti
+
+**Esempio helper:**
+```php
+// app/Http/Helpers/ApiResponse.php
+namespace App\Http\Helpers;
+
+class ApiResponse
+{
+    public static function success($data = null, string $message = null, int $code = 200)
+    {
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => $data,
+        ], $code);
+    }
+
+    public static function error(string $message, int $code = 400, $errors = null)
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'errors' => $errors,
+        ], $code);
+    }
+
+    public static function paginated($data, $pagination)
+    {
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'pagination' => [
+                'current_page' => $pagination->currentPage(),
+                'per_page' => $pagination->perPage(),
+                'total' => $pagination->total(),
+                'last_page' => $pagination->lastPage(),
+            ],
+        ]);
+    }
+}
+
+// Nel Controller
+return ApiResponse::success(new CargoProviderResource($cargoProvider), 'Creato con successo', 201);
+return ApiResponse::error('Errore di validazione', 422, $validator->errors());
+```
+
+## Paginazione Standard
+
+- **SEMPRE** paginare le liste con più di X record (es: 15-50 per pagina)
+- Usare sempre la paginazione Laravel standard
+- Restituire sempre metadata di paginazione
+
+**Esempio:**
+```php
+// Nel Controller
+$cargoProviders = CargoProvider::paginate(15);
+return ApiResponse::paginated(
+    CargoProviderResource::collection($cargoProviders),
+    $cargoProviders
+);
+```
+
+## Rate Limiting
+
+- **SEMPRE** applicare rate limiting alle API
+- Configurare limiti diversi per autenticati e non autenticati
+- Usare Laravel built-in rate limiting
+
+**Configurazione (app/Http/Kernel.php o routes):**
+```php
+Route::middleware(['throttle:60,1'])->group(function () {
+    // API pubbliche: 60 richieste al minuto
+});
+
+Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
+    // API autenticate: 120 richieste al minuto
+});
+```
+
+## Caching Strategy
+
+- Usare cache per query costose e dati frequentemente accessibili
+- Cacheare per tenant quando possibile (chiave include member_id)
+- Invalidare cache quando i dati vengono modificati
+
+**Esempio:**
+```php
+// Nel Repository o Service
+public function getPopularProviders($memberId)
+{
+    return Cache::remember("popular_providers_{$memberId}", 3600, function () use ($memberId) {
+        return CargoProvider::where('member_id', $memberId)
+            ->orderBy('view_count', 'desc')
+            ->limit(10)
+            ->get();
+    });
+}
+
+// Invalidare cache dopo update
+public function update($id, array $data)
+{
+    $provider = $this->repository->update($id, $data);
+    Cache::forget("popular_providers_{$provider->member_id}");
+    return $provider;
+}
+```
+
+## Error Handling Globale
+
+- Gestire tutti gli errori in modo consistente
+- Non esporre dettagli tecnici agli utenti finali
+- Loggare errori con contesto completo
+
+**Exception Handler (app/Exceptions/Handler.php):**
+```php
+public function register(): void
+{
+    $this->renderable(function (ValidationException $e, $request) {
+        if ($request->expectsJson()) {
+            return ApiResponse::error('Errore di validazione', 422, $e->errors());
+        }
+    });
+
+    $this->renderable(function (ModelNotFoundException $e, $request) {
+        if ($request->expectsJson()) {
+            return ApiResponse::error('Risorsa non trovata', 404);
+        }
+    });
+
+    $this->renderable(function (AuthorizationException $e, $request) {
+        if ($request->expectsJson()) {
+            return ApiResponse::error('Non autorizzato', 403);
+        }
+    });
+}
+```
+
+## Database Indexing
+
+- **SEMPRE** aggiungere indici per colonne usate in WHERE, JOIN, ORDER BY
+- Aggiungere indici per foreign keys
+- Aggiungere indici compositi per query frequenti
+
+**Nelle migrations:**
+```php
+// Indicizzazione corretta
+$table->index('member_id'); // foreign key
+$table->index('email'); // ricerca frequente
+$table->index(['member_id', 'created_at']); // query composita
+$table->index('deleted_at'); // per soft deletes
+```
+
+## Query Optimization
+
+- Usare eager loading per evitare N+1 queries
+- Usare select() per limitare colonne quando possibile
+- Usare chunk() per processare grandi dataset
+
+**Esempio:**
+```php
+// ✅ BENE: Eager loading
+$cargoProviders = CargoProvider::with('member.user')->get();
+
+// ❌ MALE: N+1 problem
+$cargoProviders = CargoProvider::all();
+foreach ($cargoProviders as $provider) {
+    $provider->member->user->email; // query per ogni iterazione
+}
+```
+
+## Events e Listeners
+
+- Usare Events per disaccoppiare logica
+- Eventi per azioni importanti: UserCreated, MemberPlanChanged, ecc.
+
+**Esempio:**
+```php
+// Event
+event(new CargoProviderCreated($cargoProvider));
+
+// Listener
+class SendWelcomeEmail
+{
+    public function handle(CargoProviderCreated $event)
+    {
+        // Invia email
+    }
+}
+```
+
+## Queue Jobs per Operazioni Pesanti
+
+- Usare Queue per operazioni che richiedono tempo
+- Esempi: invio email, generazione report, export, import
+
+**Esempio:**
+```php
+dispatch(new ExportCargoProvidersJob($memberId, $filters));
+```
+
+## API Versioning (se necessario)
+
+- Se si prevede evoluzione API, usare versioning
+- Pattern: `/api/v1/cargo-providers`, `/api/v2/cargo-providers`
+
+## Security Best Practices
+
+- **SEMPRE** sanitizzare input utente
+- Validare e filtrare tutti gli input
+- Usare prepared statements (automatico con Eloquent)
+- Implementare CORS correttamente
+- Usare HTTPS in produzione
+- Implementare CSRF protection per form web
+
+## Logging Strutturato
+
+- Loggare azioni importanti con contesto
+- Usare log levels appropriati (info, warning, error)
+- Includere user_id, member_id, IP, user agent nei log
+
+**Esempio:**
+```php
+Log::info('Cargo provider created', [
+    'user_id' => auth()->id(),
+    'member_id' => auth()->user()->getOwnerMember()->id,
+    'cargo_provider_id' => $cargoProvider->id,
+    'ip' => request()->ip(),
+]);
+```
+
+## Health Checks e Monitoring
+
+- Implementare endpoint per health check
+- Monitorare performance, errori, lentezza query
+
+**Esempio route:**
+```php
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'ok',
+        'database' => DB::connection()->getPdo() ? 'connected' : 'disconnected',
+        'cache' => Cache::get('health_check') ? 'working' : 'check',
+        'timestamp' => now()->toIso8601String(),
+    ]);
+});
+```
+
+## File Upload e Storage
+
+- **SEMPRE** validare file upload (tipo, dimensione, mime type)
+- Usare Laravel Storage (dischi: local, s3, ecc.)
+- Salvare percorsi nel database, non file binari
+- Organizzare file per tenant quando applicabile
+
+**Form Request per file upload:**
+```php
+public function rules(): array
+{
+    return [
+        'file' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:10240'], // 10MB max
+        'image' => ['nullable', 'image', 'mimes:jpeg,png,jpg', 'max:2048'], // 2MB max
+    ];
+}
+```
+
+**Storage pattern:**
+```php
+// Nel Service o Controller
+if ($request->hasFile('file')) {
+    $path = $request->file('file')->store(
+        "members/{$memberId}/documents",
+        's3' // o 'local' per sviluppo
+    );
+    
+    $model->file_path = $path;
+    $model->save();
+}
+
+// Per recuperare URL pubblico
+$url = Storage::disk('s3')->url($model->file_path);
+```
+
+- Considerare Spatie Media Library (già installato) per gestione avanzata file/media
+- Generare thumbnail per immagini quando necessario
+- Implementare cleanup per file orfani
+
+## Email e Notifiche
+
+- Usare Laravel Notifications per tutte le notifiche
+- Creare notification class per ogni tipo di notificazione
+- Supportare sia email che database notifications
+
+**Struttura:**
+```
+app/Notifications/
+  Member/
+    WelcomeMemberNotification.php
+    LicenseExpiringNotification.php
+  Customer/
+    WelcomeCustomerNotification.php
+```
+
+**Esempio:**
+```php
+<?php
+
+namespace App\Notifications\Member;
+
+use Illuminate\Notifications\Notification;
+use Illuminate\Notifications\Messages\MailMessage;
+
+class WelcomeMemberNotification extends Notification
+{
+    public function via($notifiable): array
+    {
+        return ['mail', 'database'];
+    }
+
+    public function toMail($notifiable): MailMessage
+    {
+        return (new MailMessage)
+            ->subject('Benvenuto in Zelante!')
+            ->view('emails.member.welcome', [
+                'member' => $notifiable,
+            ]);
+    }
+
+    public function toArray($notifiable): array
+    {
+        return [
+            'message' => 'Benvenuto in Zelante!',
+            'action_url' => route('dashboard'),
+        ];
+    }
+}
+
+// Uso
+$user->notify(new WelcomeMemberNotification());
+```
+
+## Ricerca e Filtri Avanzati
+
+- Creare un pattern standard per ricerche e filtri
+- Usare query scope o repository methods per filtri riutilizzabili
+- Supportare filtri multipli, sorting, paginazione insieme
+
+**Esempio Repository Pattern:**
+```php
+public function search(array $filters, array $sort = [], int $perPage = 15)
+{
+    $query = $this->model->newQuery();
+
+    // Filtri
+    if (isset($filters['name'])) {
+        $query->where('name', 'like', "%{$filters['name']}%");
+    }
+
+    if (isset($filters['status'])) {
+        $query->where('status', $filters['status']);
+    }
+
+    if (isset($filters['date_from'])) {
+        $query->whereDate('created_at', '>=', $filters['date_from']);
+    }
+
+    // Sorting
+    $sortColumn = $sort['column'] ?? 'created_at';
+    $sortDirection = $sort['direction'] ?? 'desc';
+    $query->orderBy($sortColumn, $sortDirection);
+
+    // Paginazione
+    return $query->paginate($perPage);
+}
+```
+
+- Considerare pacchetti come Spatie Query Builder per filtri avanzati
+- Supportare ricerca full-text quando necessario
+
+## Operazioni Bulk (Batch)
+
+- Per operazioni su multiple record, usare batch operations
+- Usare transazioni per batch operations
+- Validare e gestire errori per ogni record
+
+**Esempio:**
+```php
+public function bulkUpdate(array $ids, array $data): array
+{
+    DB::beginTransaction();
+    $results = ['success' => [], 'failed' => []];
+
+    try {
+        foreach ($ids as $id) {
+            try {
+                $model = $this->repository->find($id);
+                $this->service->update($model, $data);
+                $results['success'][] = $id;
+            } catch (\Exception $e) {
+                $results['failed'][] = ['id' => $id, 'error' => $e->getMessage()];
+            }
+        }
+
+        DB::commit();
+        return $results;
+    } catch (\Exception $e) {
+        DB::rollBack();
+        throw $e;
+    }
+}
+```
+
+## Export e Import
+
+- Implementare export in queue jobs per grandi dataset
+- Supportare formati multipli (CSV, Excel, PDF)
+- Validare e sanitizzare dati importati
+
+**Esempio Export Job:**
+```php
+class ExportCargoProvidersJob implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public function __construct(
+        public int $memberId,
+        public array $filters,
+        public string $format = 'csv'
+    ) {}
+
+    public function handle()
+    {
+        $data = CargoProvider::where('member_id', $this->memberId)
+            ->filter($this->filters)
+            ->get();
+
+        $filename = "export_".time().".{$this->format}";
+        $path = "exports/{$this->memberId}/{$filename}";
+
+        // Genera file e salva su storage
+        Storage::disk('s3')->put($path, $this->generateFile($data));
+
+        // Notifica utente che export è pronto
+        auth()->user()->notify(new ExportReadyNotification($path));
+    }
+}
+```
+
+## Scheduled Tasks (Cron Jobs)
+
+- Usare Laravel Scheduler per task ricorrenti
+- Registrare in `app/Console/Kernel.php` o `routes/console.php` (Laravel 11+)
+
+**Esempio:**
+```php
+// app/Console/Kernel.php o routes/console.php
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('members:check-expiring-licenses')->daily();
+Schedule::command('cleanup:old-exports')->weekly();
+Schedule::command('members:send-usage-reports')->monthly();
+```
+
+- Documentare tutti i scheduled tasks
+- Monitorare esecuzione dei task
+
+## API Documentation
+
+- Documentare tutte le API endpoint
+- Usare Swagger/OpenAPI (Laravel Swagger/OpenAPI package)
+- Mantenere documentazione aggiornata con il codice
+
+**Esempio con Swagger:**
+```php
+/**
+ * @OA\Get(
+ *     path="/api/cargo-providers",
+ *     summary="Lista cargo providers",
+ *     tags={"Cargo Providers"},
+ *     security={{"sanctum": {}}},
+ *     @OA\Response(
+ *         response=200,
+ *         description="Lista cargo providers",
+ *         @OA\JsonContent(...)
+ *     )
+ * )
+ */
+```
+
+## Localization/Internationalization
+
+- Se l'app deve supportare più lingue, strutturare traduzioni per dominio
+- Usare file di traduzione organizzati: `lang/{locale}/{domain}.php`
+
+**Struttura:**
+```
+resources/lang/
+  it/
+    cargo_provider.php
+    member.php
+  en/
+    cargo_provider.php
+    member.php
+```
+
+**Uso:**
+```php
+return __('cargo_provider.messages.created');
+return trans('cargo_provider.validation.required', ['attribute' => 'nome']);
+```
+
+- Usare sempre traduzioni invece di stringhe hardcoded
+- Supportare fallback locale
+
+## Database Seeding e Factories
+
+- Creare factories per tutti i modelli principali
+- Seeder per dati iniziali (ruoli, permessi, license plans)
+- Seeder per dati di sviluppo/test
+
+**Struttura:**
+```php
+// database/factories/MemberFactory.php
+Member::factory()->definition();
+Member::factory()->withExpiredLicense()->create();
+Member::factory()->withSubMembers(3)->create();
+```
+
+## Webhooks (se necessario)
+
+- Se il sistema deve inviare webhooks esterni, implementare pattern standard
+- Queue webhooks per non bloccare richieste
+- Retry logic per webhooks falliti
+- Signature verification per sicurezza
+
+## API Authentication
+
+- **SEMPRE** usare Laravel Sanctum per API authentication
+- Implementare token-based authentication per API
+- Supportare sia session-based (web) che token-based (API)
+
+**Configurazione:**
+```php
+// routes/api.php
+Route::middleware('auth:sanctum')->group(function () {
+    // API protette
+});
+```
+
+## Request/Response Middleware
+
+- Middleware per loggare tutte le richieste API
+- Middleware per trasformare response format se necessario
+- Middleware per aggiungere metadata (request_id, timestamp)
+
+## DTO (Data Transfer Objects) - Opzionale
+
+- Per logica complessa, considerare DTO per tipizzare dati
+- Utile per validazione cross-layer e type safety
+
+**Esempio:**
+```php
+class CreateCargoProviderDTO
+{
+    public function __construct(
+        public string $name,
+        public string $email,
+        public ?string $phone = null,
+    ) {}
+}
+```
+
+- Usare questi prefissi nel controller per mantenere coerenza:
+  ```php
+  // Esempio di uso nei metodi
+  return view($this->VIEW_PREFIX . '.index', ...);
+  // oppure per Inertia
+  return Inertia::render($this->VIEW_PREFIX . '/Index', ...);
+  
+  // Per le rotte
+  return redirect()->route($this->ROUTE_PREFIX . '.index');
+  
+  // Per le traduzioni
+  return __('' . $this->LANG_PREFIX . '.messages.created');
+  ```

@@ -1,0 +1,1530 @@
+---
+alwaysApply: true
+---
+
+# Regole Frontend - Progetto Zelante
+
+Queste regole si aggiungono a quelle di Laravel Boost e sono specifiche per lo sviluppo frontend del progetto.
+
+**Stack tecnologico:**
+- React 19
+- Inertia.js v2
+- Tailwind CSS v4
+- shadcn/ui
+- TypeScript
+- Vite
+
+## shadcn/ui
+
+- **SEMPRE** usare shadcn/ui come libreria di componenti base
+- **SEMPRE** seguire la documentazione ufficiale di shadcn/ui: https://ui.shadcn.com/
+- Prima di creare un nuovo componente, **SEMPRE** verificare se esiste già in shadcn/ui
+- Se esiste in shadcn/ui, usare quello e personalizzarlo se necessario
+- Non duplicare componenti che già esistono in shadcn/ui
+
+### Struttura Cartelle Componenti
+
+```
+resources/js/
+  Components/
+    ui/                          # Componenti shadcn/ui (NON modificare direttamente)
+      button.tsx
+      input.tsx
+      dialog.tsx
+      ...
+    custom/                      # Componenti custom del progetto
+      forms/
+        FormField.tsx
+        FormContainer.tsx
+        ...
+      tables/
+        DataTable.tsx
+        ...
+      layout/
+        Sidebar.tsx
+        Header.tsx
+        ...
+    domains/                     # Componenti specifici per dominio
+      cargo-provider/
+        CargoProviderForm.tsx
+        CargoProviderCard.tsx
+        ...
+```
+
+**REGOLE IMPORTANTI:**
+- I componenti in `ui/` sono gestiti da shadcn CLI - non modificarli direttamente
+- I componenti custom vanno in `custom/` o `domains/`
+- Non creare componenti che duplicano funzionalità di shadcn/ui
+
+### Installazione Componenti shadcn
+
+Prima di creare un componente custom:
+1. Controllare la documentazione shadcn: https://ui.shadcn.com/docs/components
+2. Se esiste, installarlo con: `npx shadcn@latest add [component-name]`
+3. Se non esiste o non copre le esigenze, allora creare componente custom
+
+**Esempio:**
+```bash
+# Prima di creare un Button custom, verificare
+npx shadcn@latest add button  # se già installato, usare quello
+
+# Solo se shadcn non ha quello che serve, creare custom
+```
+
+## Form Componenti Riutilizzabili
+
+- **SEMPRE** creare form riutilizzabili per creazione, modifica e visualizzazione
+- Usare gli stessi componenti base con modalità specifiche per ogni caso d'uso
+- Separare la logica dal componente usando custom hooks
+
+### Pattern Form Standard
+
+**Struttura:**
+```
+resources/js/
+  Components/
+    custom/
+      forms/
+        FormField.tsx           # Campo form riutilizzabile
+        FormContainer.tsx        # Container form
+        FormActions.tsx          # Bottoni azioni form
+        FormSection.tsx          # Sezione form con titolo
+  Hooks/
+    useFormMode.ts              # Hook per gestire modalità form
+    useFormValidation.ts        # Hook per validazione
+    domains/
+      cargo-provider/
+        useCargoProviderForm.ts # Hook specifico dominio
+  Pages/
+    Domains/
+      CargoProvider/
+        Create.tsx              # Pagina creazione
+        Edit.tsx                # Pagina modifica
+        Show.tsx                # Pagina visualizzazione
+```
+
+**Modalità Form:**
+- `create` - Creazione nuovo record
+- `edit` - Modifica record esistente
+- `view` - Visualizzazione sola lettura
+
+**Esempio Form Component:**
+
+```tsx
+// resources/js/Components/custom/forms/FormContainer.tsx
+import { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
+
+interface FormContainerProps {
+  mode: 'create' | 'edit' | 'view';
+  children: ReactNode;
+  className?: string;
+}
+
+export function FormContainer({ mode, children, className }: FormContainerProps) {
+  return (
+    <div className={cn(
+      "space-y-6",
+      mode === 'view' && "pointer-events-none", // Disabilita interazione in view
+      className
+    )}>
+      {children}
+    </div>
+  );
+}
+```
+
+```tsx
+// resources/js/Components/custom/forms/FormField.tsx
+import { Label } from '@/Components/ui/label';
+import { Input } from '@/Components/ui/input';
+import { Textarea } from '@/Components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/Components/ui/select';
+
+interface FormFieldProps {
+  label: string;
+  name: string;
+  mode: 'create' | 'edit' | 'view';
+  type?: 'text' | 'email' | 'textarea' | 'select' | 'number';
+  options?: { value: string; label: string }[];
+  errors?: Record<string, string[]>;
+  defaultValue?: string;
+  required?: boolean;
+}
+
+export function FormField({
+  label,
+  name,
+  mode,
+  type = 'text',
+  options,
+  errors,
+  defaultValue,
+  required = false,
+}: FormFieldProps) {
+  const isReadOnly = mode === 'view';
+  const hasError = errors && errors[name];
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={name}>
+        {label}
+        {required && !isReadOnly && <span className="text-destructive ml-1">*</span>}
+      </Label>
+      
+      {type === 'textarea' ? (
+        <Textarea
+          id={name}
+          name={name}
+          defaultValue={defaultValue}
+          readOnly={isReadOnly}
+          disabled={isReadOnly}
+          className={hasError ? 'border-destructive' : ''}
+        />
+      ) : type === 'select' ? (
+        <Select name={name} defaultValue={defaultValue} disabled={isReadOnly}>
+          <SelectTrigger className={hasError ? 'border-destructive' : ''}>
+            <SelectValue placeholder={`Seleziona ${label.toLowerCase()}`} />
+          </SelectTrigger>
+          <SelectContent>
+            {options?.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
+        <Input
+          id={name}
+          name={name}
+          type={type}
+          defaultValue={defaultValue}
+          readOnly={isReadOnly}
+          disabled={isReadOnly}
+          required={required && !isReadOnly}
+          className={hasError ? 'border-destructive' : ''}
+        />
+      )}
+      
+      {hasError && (
+        <p className="text-sm text-destructive">{errors[name][0]}</p>
+      )}
+    </div>
+  );
+}
+```
+
+```tsx
+// resources/js/Components/custom/forms/FormActions.tsx
+import { Button } from '@/Components/ui/button';
+import { Link } from '@inertiajs/react';
+import { cn } from '@/lib/utils';
+
+interface FormActionsProps {
+  mode: 'create' | 'edit' | 'view';
+  cancelRoute: string;
+  showCancel?: boolean;
+  submitLabel?: string;
+  className?: string;
+}
+
+export function FormActions({
+  mode,
+  cancelRoute,
+  showCancel = true,
+  submitLabel,
+  className,
+}: FormActionsProps) {
+  const labels = {
+    create: 'Crea',
+    edit: 'Salva modifiche',
+    view: undefined,
+  };
+
+  if (mode === 'view') {
+    return (
+      <div className={cn("flex justify-end", className)}>
+        <Link href={cancelRoute}>
+          <Button variant="outline">Indietro</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("flex justify-end gap-2", className)}>
+      {showCancel && (
+        <Link href={cancelRoute}>
+          <Button type="button" variant="outline">Annulla</Button>
+        </Link>
+      )}
+      <Button type="submit">
+        {submitLabel || labels[mode]}
+      </Button>
+    </div>
+  );
+}
+```
+
+**Esempio uso in pagina:**
+
+```tsx
+// resources/js/Pages/Domains/CargoProvider/Create.tsx
+import { FormContainer } from '@/Components/custom/forms/FormContainer';
+import { FormField } from '@/Components/custom/forms/FormField';
+import { FormActions } from '@/Components/custom/forms/FormActions';
+import { useCargoProviderForm } from '@/Hooks/domains/cargo-provider/useCargoProviderForm';
+
+export default function Create() {
+  const { form, submit, errors } = useCargoProviderForm({
+    mode: 'create',
+    route: route('cargo-providers.store'),
+  });
+
+  return (
+    <form onSubmit={submit}>
+      <FormContainer mode="create">
+        <FormField
+          label="Nome"
+          name="name"
+          mode="create"
+          errors={errors}
+          required
+        />
+        <FormField
+          label="Email"
+          name="email"
+          mode="create"
+          type="email"
+          errors={errors}
+          required
+        />
+        <FormField
+          label="Telefono"
+          name="phone"
+          mode="create"
+          type="text"
+          errors={errors}
+        />
+      </FormContainer>
+      
+      <FormActions
+        mode="create"
+        cancelRoute={route('cargo-providers.index')}
+      />
+    </form>
+  );
+}
+```
+
+## Separazione Componente-Logica (Hooks)
+
+- **SEMPRE** separare la logica dai componenti usando custom hooks
+- I componenti devono essere presentazionali (UI only)
+- La logica di business, stato, effetti vanno negli hooks
+
+### Struttura Hooks
+
+```
+resources/js/
+  Hooks/
+    useFormMode.ts                    # Hook generico per modalità form
+    useFormValidation.ts              # Hook per validazione form
+    useApi.ts                         # Hook per chiamate API
+    useToast.ts                       # Hook per notifiche
+    domains/
+      cargo-provider/
+        useCargoProviderForm.ts       # Hook form specifico
+        useCargoProviderList.ts       # Hook per lista
+        useCargoProviderShow.ts       # Hook per visualizzazione
+```
+
+**Esempio Hook:**
+
+```tsx
+// resources/js/Hooks/domains/cargo-provider/useCargoProviderForm.ts
+import { useForm } from '@inertiajs/react';
+import { FormEventHandler } from 'react';
+import { route } from '@/lib/route';
+
+interface UseCargoProviderFormOptions {
+  mode: 'create' | 'edit';
+  route: string;
+  initialData?: Record<string, any>;
+}
+
+export function useCargoProviderForm({
+  mode,
+  route: submitRoute,
+  initialData = {},
+}: UseCargoProviderFormOptions) {
+  const form = useForm({
+    name: initialData.name || '',
+    email: initialData.email || '',
+    phone: initialData.phone || '',
+  });
+
+  const submit: FormEventHandler = (e) => {
+    e.preventDefault();
+    form.post(submitRoute, {
+      onSuccess: () => {
+        // Gestione successo
+      },
+      onError: () => {
+        // Gestione errori
+      },
+    });
+  };
+
+  return {
+    form,
+    submit,
+    errors: form.errors,
+    processing: form.processing,
+  };
+}
+```
+
+**Regole:**
+- Ogni hook deve avere un singolo scopo chiaro
+- Hooks possono comporre altri hooks
+- Hooks devono essere testabili in isolamento
+- Non mettere logica di business direttamente nei componenti
+
+## Storybook
+
+- **SEMPRE** creare un file Storybook per ogni componente custom
+- I componenti shadcn/ui non necessitano di story (sono già documentati)
+- Storybook deve essere aggiornato quando si modifica un componente
+
+### Struttura Storybook
+
+```
+resources/js/
+  Components/
+    custom/
+      forms/
+        FormField.tsx
+        FormField.stories.tsx
+        FormContainer.tsx
+        FormContainer.stories.tsx
+```
+
+**Esempio Story:**
+
+```tsx
+// resources/js/Components/custom/forms/FormField.stories.tsx
+import type { Meta, StoryObj } from '@storybook/react';
+import { FormField } from './FormField';
+
+const meta: Meta<typeof FormField> = {
+  title: 'Forms/FormField',
+  component: FormField,
+  tags: ['autodocs'],
+  argTypes: {
+    mode: {
+      control: 'select',
+      options: ['create', 'edit', 'view'],
+    },
+    type: {
+      control: 'select',
+      options: ['text', 'email', 'textarea', 'select', 'number'],
+    },
+  },
+};
+
+export default meta;
+type Story = StoryObj<typeof FormField>;
+
+export const Default: Story = {
+  args: {
+    label: 'Nome',
+    name: 'name',
+    mode: 'create',
+    type: 'text',
+  },
+};
+
+export const EditMode: Story = {
+  args: {
+    label: 'Nome',
+    name: 'name',
+    mode: 'edit',
+    type: 'text',
+    defaultValue: 'Valore esistente',
+  },
+};
+
+export const ViewMode: Story = {
+  args: {
+    label: 'Nome',
+    name: 'name',
+    mode: 'view',
+    type: 'text',
+    defaultValue: 'Valore in sola lettura',
+  },
+};
+
+export const WithError: Story = {
+  args: {
+    label: 'Email',
+    name: 'email',
+    mode: 'create',
+    type: 'email',
+    errors: {
+      email: ['L\'email non è valida'],
+    },
+  },
+};
+
+export const Select: Story = {
+  args: {
+    label: 'Tipo',
+    name: 'type',
+    mode: 'create',
+    type: 'select',
+    options: [
+      { value: '1', label: 'Opzione 1' },
+      { value: '2', label: 'Opzione 2' },
+      { value: '3', label: 'Opzione 3' },
+    ],
+  },
+};
+```
+
+**Regole Storybook:**
+- Ogni componente deve avere almeno 3 storie: default, con varianti, con errori/stati
+- Documentare props con JSDoc
+- Usare Controls per testare interattivamente
+- Mantenere storie aggiornate con modifiche ai componenti
+
+## Test E2E per Dominio
+
+- **SEMPRE** creare test E2E per ogni dominio
+- Usare **Playwright** (già installato) come framework principale
+- Considerare Cypress per casi specifici se necessario
+- Test E2E devono coprire tutti i flussi CRUD principali
+
+### Struttura Test E2E
+
+```
+tests/
+  E2E/
+    Playwright/
+      Domains/
+        CargoProvider/
+          create.spec.ts
+          edit.spec.ts
+          show.spec.ts
+          delete.spec.ts
+          list.spec.ts
+          export.spec.ts
+          permissions.spec.ts
+    Cypress/
+      e2e/
+        Domains/
+          CargoProvider/
+            create.cy.ts
+            edit.cy.ts
+            ...
+```
+
+**Esempio Test Playwright:**
+
+```typescript
+// tests/E2E/Playwright/Domains/CargoProvider/create.spec.ts
+import { test, expect } from '@playwright/test';
+
+test.describe('CargoProvider - Create', () => {
+  test.beforeEach(async ({ page }) => {
+    // Login come Member Owner
+    await page.goto('/login');
+    await page.fill('input[name="email"]', 'owner@example.com');
+    await page.fill('input[name="password"]', 'password');
+    await page.click('button[type="submit"]');
+    await page.waitForURL('/dashboard');
+  });
+
+  test('should create a new cargo provider', async ({ page }) => {
+    // Naviga alla pagina di creazione
+    await page.goto('/cargo-providers/create');
+    
+    // Compila il form
+    await page.fill('input[name="name"]', 'Test Provider');
+    await page.fill('input[name="email"]', 'test@provider.com');
+    await page.fill('input[name="phone"]', '+39 123 456 7890');
+    
+    // Submit
+    await page.click('button[type="submit"]');
+    
+    // Verifica redirect
+    await expect(page).toHaveURL(/\/cargo-providers/);
+    
+    // Verifica success message o presenza del nuovo record
+    await expect(page.locator('text=Test Provider')).toBeVisible();
+  });
+
+  test('should show validation errors', async ({ page }) => {
+    await page.goto('/cargo-providers/create');
+    
+    // Submit senza compilare
+    await page.click('button[type="submit"]');
+    
+    // Verifica errori
+    await expect(page.locator('text=Il nome è obbligatorio')).toBeVisible();
+    await expect(page.locator('text=L\'email è obbligatoria')).toBeVisible();
+  });
+
+  test('should validate email format', async ({ page }) => {
+    await page.goto('/cargo-providers/create');
+    
+    await page.fill('input[name="name"]', 'Test Provider');
+    await page.fill('input[name="email"]', 'invalid-email');
+    await page.click('button[type="submit"]');
+    
+    await expect(page.locator('text=L\'email non è valida')).toBeVisible();
+  });
+});
+```
+
+**Esempio Test Cypress:**
+
+```typescript
+// tests/E2E/Cypress/e2e/Domains/CargoProvider/create.cy.ts
+describe('CargoProvider - Create', () => {
+  beforeEach(() => {
+    cy.login('owner@example.com', 'password');
+    cy.visit('/cargo-providers/create');
+  });
+
+  it('should create a new cargo provider', () => {
+    cy.get('input[name="name"]').type('Test Provider');
+    cy.get('input[name="email"]').type('test@provider.com');
+    cy.get('input[name="phone"]').type('+39 123 456 7890');
+    
+    cy.get('button[type="submit"]').click();
+    
+    cy.url().should('include', '/cargo-providers');
+    cy.contains('Test Provider').should('be.visible');
+  });
+
+  it('should show validation errors', () => {
+    cy.get('button[type="submit"]').click();
+    
+    cy.contains('Il nome è obbligatorio').should('be.visible');
+    cy.contains("L'email è obbligatoria").should('be.visible');
+  });
+});
+```
+
+### Checklist Test E2E per Dominio
+
+Per ogni dominio, creare test per:
+
+- [ ] **Create**: Creazione record con dati validi
+- [ ] **Create Validation**: Validazione form creazione
+- [ ] **Edit**: Modifica record esistente
+- [ ] **Edit Validation**: Validazione form modifica
+- [ ] **Show**: Visualizzazione record
+- [ ] **Delete**: Eliminazione record (soft delete)
+- [ ] **List**: Visualizzazione lista con paginazione
+- [ ] **Filters**: Filtri nella lista
+- [ ] **Search**: Ricerca nella lista
+- [ ] **Export**: Export dati (se applicabile)
+- [ ] **Permissions Owner**: Permessi Member Owner
+- [ ] **Permissions Sub-Member**: Permessi Sub-Member (con/senza permessi)
+- [ ] **Permissions Customer**: Customer non può accedere
+- [ ] **Multi-tenancy**: Isolamento dati per tenant
+
+### Comandi Test E2E
+
+```bash
+# Playwright
+make test-e2e              # Tutti i test
+make test-e2e-ui           # Con UI
+npm run test:e2e           # Alternativa
+npx playwright test tests/E2E/Playwright/Domains/CargoProvider
+
+# Cypress
+npm run cypress:open       # Apri Cypress UI
+npm run cypress:run        # Run headless
+```
+
+## Best Practices Generali Frontend
+
+### TypeScript
+- **SEMPRE** usare TypeScript, mai `any` se possibile
+- Definire interfacce/types per tutti i props
+- Usare type inference quando possibile
+
+### Inertia.js
+- Usare `useForm` di Inertia per form management
+- Usare `Link` component per navigazione
+- Gestire loading states correttamente
+- Gestire errori di validazione dal backend
+
+### Tailwind CSS
+- Usare classi Tailwind, evitare CSS custom quando possibile
+- Usare `cn()` utility per conditional classes
+- Seguire design system di shadcn/ui
+- Usare variabili CSS di Tailwind per temi
+
+### Performance
+- Usare React.memo per componenti pesanti
+- Lazy loading per route e componenti grandi
+- Code splitting con Vite
+- Ottimizzare immagini
+
+### Accessibility
+- Usare semantic HTML
+- Aria labels quando necessario
+- Keyboard navigation
+- Focus management nei form
+
+## Error Handling e Error Boundaries
+
+- **SEMPRE** implementare Error Boundaries React per catturare errori
+- Gestire errori in modo user-friendly
+- Mostrare messaggi di errore chiari e actionable
+
+**Error Boundary Component:**
+```tsx
+// resources/js/Components/custom/ErrorBoundary.tsx
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Alert, AlertDescription, AlertTitle } from '@/Components/ui/alert';
+import { Button } from '@/Components/ui/button';
+
+interface Props {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+    // Qui puoi loggare l'errore a un servizio esterno (Sentry, ecc.)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
+      return (
+        <Alert variant="destructive" className="m-4">
+          <AlertTitle>Ops! Qualcosa è andato storto</AlertTitle>
+          <AlertDescription>
+            {this.state.error?.message || 'Si è verificato un errore imprevisto'}
+          </AlertDescription>
+          <Button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="mt-2"
+          >
+            Riprova
+          </Button>
+        </Alert>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+```
+
+**Uso:**
+```tsx
+<ErrorBoundary>
+  <YourComponent />
+</ErrorBoundary>
+```
+
+## Loading States e Skeleton
+
+- **SEMPRE** mostrare stati di loading durante operazioni async
+- Usare Skeleton components invece di spinner quando possibile
+- shadcn/ui fornisce componenti Skeleton
+
+**Pattern Loading:**
+```tsx
+// Con Skeleton (preferito per liste, tabelle)
+{isLoading ? (
+  <div className="space-y-2">
+    <Skeleton className="h-4 w-full" />
+    <Skeleton className="h-4 w-full" />
+    <Skeleton className="h-4 w-3/4" />
+  </div>
+) : (
+  <DataTable data={data} />
+)}
+
+// Con Spinner (per azioni, bottoni)
+<Button disabled={isLoading}>
+  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+  Salva
+</Button>
+```
+
+## Toast/Notifications
+
+- Usare il componente Toast di shadcn/ui per notifiche
+- Mostrare feedback per tutte le azioni utente (success, error, info)
+
+**Setup Toast (shadcn):**
+```bash
+npx shadcn@latest add sonner
+# oppure
+npx shadcn@latest add toast
+```
+
+**Esempio uso:**
+```tsx
+import { toast } from 'sonner'; // se usi sonner
+// oppure
+import { useToast } from '@/Components/ui/use-toast';
+
+// Nel componente dopo operazione
+toast.success('Operazione completata con successo');
+toast.error('Si è verificato un errore');
+toast.info('Informazione importante');
+```
+
+**Con Inertia:**
+```tsx
+// Nel hook o componente
+form.post(route, {
+  onSuccess: () => {
+    toast.success('Salvato con successo');
+  },
+  onError: () => {
+    toast.error('Errore durante il salvataggio');
+  },
+});
+```
+
+## Form Validation Frontend
+
+- Validare form anche lato frontend per UX migliore
+- Validazione backend rimane principale e definitiva
+- Usare librerie come `zod` + `react-hook-form` per validazione tipizzata
+
+**Esempio con zod:**
+```tsx
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+const cargoProviderSchema = z.object({
+  name: z.string().min(1, 'Il nome è obbligatorio'),
+  email: z.string().email('Email non valida'),
+  phone: z.string().optional(),
+});
+
+type CargoProviderFormData = z.infer<typeof cargoProviderSchema>;
+
+function CargoProviderForm() {
+  const form = useForm<CargoProviderFormData>({
+    resolver: zodResolver(cargoProviderSchema),
+  });
+
+  // ...
+}
+```
+
+## State Management
+
+- Per la maggior parte dei casi, **React state + Context** è sufficiente
+- Considerare **Zustand** solo per state globale complesso
+- **NON** usare Redux a meno che non sia strettamente necessario
+- Inertia gestisce già molto dello state management
+
+**Quando usare Zustand:**
+- State globale che molti componenti condividono
+- State che persiste tra navigazioni
+- UI state complesso (modali, sidebar, ecc.)
+
+**Esempio Zustand:**
+```tsx
+// resources/js/stores/uiStore.ts
+import { create } from 'zustand';
+
+interface UIState {
+  sidebarOpen: boolean;
+  toggleSidebar: () => void;
+}
+
+export const useUIStore = create<UIState>((set) => ({
+  sidebarOpen: false,
+  toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+}));
+```
+
+## Empty States e Error States
+
+- **SEMPRE** gestire stati vuoti (nessun dato) e errori
+- Componenti dedicati per questi stati
+
+**Empty State Component:**
+```tsx
+// resources/js/Components/custom/EmptyState.tsx
+import { AlertCircle } from 'lucide-react';
+import { Button } from '@/Components/ui/button';
+import { Link } from '@inertiajs/react';
+
+interface EmptyStateProps {
+  title: string;
+  description: string;
+  actionLabel?: string;
+  actionRoute?: string;
+}
+
+export function EmptyState({ title, description, actionLabel, actionRoute }: EmptyStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+      <h3 className="text-lg font-semibold">{title}</h3>
+      <p className="text-muted-foreground mt-2">{description}</p>
+      {actionLabel && actionRoute && (
+        <Link href={actionRoute}>
+          <Button className="mt-4">{actionLabel}</Button>
+        </Link>
+      )}
+    </div>
+  );
+}
+```
+
+**Uso:**
+```tsx
+{data.length === 0 ? (
+  <EmptyState
+    title="Nessun cargo provider"
+    description="Inizia creando il tuo primo cargo provider"
+    actionLabel="Crea cargo provider"
+    actionRoute={route('cargo-providers.create')}
+  />
+) : (
+  <DataTable data={data} />
+)}
+```
+
+## Optimistic Updates
+
+- Per migliorare UX, aggiornare UI immediatamente prima che la richiesta completi
+- Revertire in caso di errore
+
+**Esempio:**
+```tsx
+const [items, setItems] = useState(data);
+
+const handleDelete = async (id: number) => {
+  // Optimistic update
+  const previousItems = items;
+  setItems(items.filter(item => item.id !== id));
+
+  try {
+    await axios.delete(`/api/items/${id}`);
+  } catch (error) {
+    // Revert in caso di errore
+    setItems(previousItems);
+    toast.error('Errore durante l\'eliminazione');
+  }
+};
+```
+
+## Debouncing e Throttling
+
+- Usare debounce per ricerca e input che triggerano operazioni costose
+- Usare throttle per eventi frequenti (scroll, resize)
+
+**Esempio ricerca con debounce:**
+```tsx
+import { useDebouncedCallback } from 'use-debounce';
+
+function SearchInput() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebouncedCallback((value: string) => {
+    // Esegui ricerca dopo 300ms dall'ultima digitazione
+    router.get(route('search'), { q: value }, { preserveState: true });
+  }, 300);
+
+  return (
+    <Input
+      value={searchTerm}
+      onChange={(e) => {
+        setSearchTerm(e.target.value);
+        debouncedSearch(e.target.value);
+      }}
+    />
+  );
+}
+```
+
+## Confirmation Dialogs
+
+- **SEMPRE** chiedere conferma per azioni distruttive (delete, ecc.)
+- Usare Alert Dialog di shadcn/ui
+
+**Esempio:**
+```tsx
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/Components/ui/alert-dialog';
+
+<AlertDialog>
+  <AlertDialogTrigger asChild>
+    <Button variant="destructive">Elimina</Button>
+  </AlertDialogTrigger>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>Sei sicuro?</AlertDialogTitle>
+      <AlertDialogDescription>
+        Questa azione non può essere annullata. Questo record verrà eliminato.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel>Annulla</AlertDialogCancel>
+      <AlertDialogAction onClick={handleDelete}>Elimina</AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
+```
+
+## File Upload Pattern
+
+- Componente riutilizzabile per upload file
+- Mostrare progress, preview, validazione
+
+**Esempio:**
+```tsx
+// resources/js/Components/custom/FileUpload.tsx
+import { useFileUpload } from '@inertiajs/react';
+import { Input } from '@/Components/ui/input';
+import { Progress } from '@/Components/ui/progress';
+
+interface FileUploadProps {
+  onUpload: (file: File) => void;
+  accept?: string;
+  maxSize?: number; // in MB
+}
+
+export function FileUpload({ onUpload, accept, maxSize = 10 }: FileUploadProps) {
+  const { progress, post } = useFileUpload();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > maxSize * 1024 * 1024) {
+      toast.error(`File troppo grande. Massimo ${maxSize}MB`);
+      return;
+    }
+
+    post(route('upload'), {
+      data: { file },
+      onSuccess: () => {
+        onUpload(file);
+      },
+    });
+  };
+
+  return (
+    <div>
+      <Input type="file" onChange={handleFileChange} accept={accept} />
+      {progress && <Progress value={progress.percentage} className="mt-2" />}
+    </div>
+  );
+}
+```
+
+## Responsive Design (CRITICO)
+
+- **SEMPRE** sviluppare mobile-first - TUTTO deve essere responsive
+- **PRIORITÀ ASSOLUTA**: Tutti i componenti, form, tabelle, layout devono funzionare perfettamente su mobile
+- Usare breakpoints Tailwind: `sm:`, `md:`, `lg:`, `xl:`, `2xl:`
+- Testare su dispositivi reali o dev tools browser
+- Usare componenti responsive di shadcn/ui
+
+**Breakpoints Tailwind:**
+- Default (mobile): < 640px
+- `sm`: 640px (tablet portrait)
+- `md`: 768px (tablet landscape)
+- `lg`: 1024px (desktop)
+- `xl`: 1280px (large desktop)
+- `2xl`: 1536px (extra large)
+
+**Regole Responsive:**
+- Partire sempre dallo stile mobile (senza breakpoint)
+- Aggiungere breakpoint per schermi più grandi
+- Testare sempre su mobile durante sviluppo
+- Usare layout stack su mobile, grid/columns su desktop
+
+**Esempi Pattern Responsive:**
+
+```tsx
+// Form responsive
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  {/* Su mobile: 1 colonna, tablet: 2, desktop: 3 */}
+</div>
+
+// DataTable responsive
+<div className="overflow-x-auto">
+  {/* Permette scroll orizzontale su mobile se necessario */}
+  <DataTable data={data} />
+</div>
+
+// Navigation mobile
+<div className="block md:hidden">
+  {/* Mobile menu */}
+</div>
+<div className="hidden md:block">
+  {/* Desktop menu */}
+</div>
+
+// Button responsive
+<Button className="w-full md:w-auto">
+  {/* Full width su mobile, auto su desktop */}
+</Button>
+```
+
+**Componenti che DEVONO essere responsive:**
+- Form (stack su mobile, multi-column su desktop)
+- DataTable (scroll orizzontale se necessario, colonne ridotte su mobile)
+- Navigation (hamburger menu mobile, menu orizzontale desktop)
+- Cards/Grid (1 colonna mobile, multi-column desktop)
+- Modals/Dialogs (full screen su mobile, centered su desktop)
+- Sidebar (overlay su mobile, fixed su desktop)
+
+## Dark Mode (se necessario)
+
+- shadcn/ui supporta dark mode out of the box
+- Usare `next-themes` o equivalente per toggle tema
+- Testare tutti i componenti in dark mode
+
+## Breadcrumbs
+
+- Usare breadcrumbs per navigazione gerarchica
+- Componente di shadcn/ui se disponibile
+
+## Type Safety Avanzata
+
+- Definire tipi TypeScript per tutte le props
+- Usare `zod` per validazione e inferenza tipi
+- Tipizzare risposte Inertia
+
+```tsx
+// resources/js/types/index.ts
+export interface CargoProvider {
+  id: number;
+  name: string;
+  email: string;
+  phone?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PageProps {
+  auth: {
+    user: User;
+  };
+  translations: Record<string, any>;
+}
+
+// Estendere PageProps per ogni pagina
+interface CargoProviderIndexProps extends PageProps {
+  cargoProviders: CargoProvider[];
+}
+```
+
+### Organizzazione File
+
+```
+resources/js/
+  Components/
+    ui/              # shadcn components
+    custom/          # Componenti custom
+    domains/         # Componenti specifici dominio
+  Hooks/             # Custom hooks
+    domains/         # Hooks specifici dominio
+  Pages/             # Inertia pages
+    Domains/         # Pagine per dominio
+  lib/               # Utilities, helpers
+  types/             # TypeScript types/interfaces
+```
+
+## DataTable di shadcn/ui
+
+- **SEMPRE** usare il componente DataTable di shadcn/ui per tutte le tabelle
+- Non creare tabelle custom quando DataTable di shadcn copre le esigenze
+- DataTable di shadcn supporta: sorting, filtering, pagination, selection, column visibility
+
+### Installazione DataTable
+
+```bash
+# Installare DataTable da shadcn
+npx shadcn@latest add data-table
+```
+
+### Uso DataTable
+
+**Esempio base:**
+```tsx
+// resources/js/Components/domains/cargo-provider/CargoProviderTable.tsx
+import {
+  ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from "@tanstack/react-table"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/Components/ui/table"
+
+interface CargoProviderTableProps {
+  data: CargoProvider[];
+  columns: ColumnDef<CargoProvider>[];
+}
+
+export function CargoProviderTable({ data, columns }: CargoProviderTableProps) {
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  })
+
+  return (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id}>
+              {headerGroup.headers.map((header) => (
+                <TableHead key={header.id}>
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows?.length ? (
+            table.getRowModel().rows.map((row) => (
+              <TableRow
+                key={row.id}
+                data-state={row.getIsSelected() && "selected"}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <TableCell key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={columns.length} className="h-24 text-center">
+                Nessun risultato.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+```
+
+**Con sorting e filtering:**
+```tsx
+import {
+  getSortedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+} from "@tanstack/react-table"
+
+const table = useReactTable({
+  data,
+  columns,
+  getCoreRowModel: getCoreRowModel(),
+  getSortedRowModel: getSortedRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
+  getPaginationRowModel: getPaginationRowModel(),
+  initialState: {
+    pagination: {
+      pageSize: 10,
+    },
+  },
+})
+```
+
+**Regole:**
+- Usare sempre DataTable di shadcn per liste/tabelle di dati
+- Personalizzare solo se necessario, sempre partendo da DataTable base
+- Supportare sempre: sorting, filtering (opzionale), pagination
+- Per tabelle complesse, usare `@tanstack/react-table` (già incluso in DataTable shadcn)
+
+### Struttura Colonne
+
+```tsx
+// resources/js/Components/domains/cargo-provider/cargoProviderColumns.tsx
+import { ColumnDef } from "@tanstack/react-table"
+import { CargoProvider } from "@/types"
+import { Button } from "@/Components/ui/button"
+import { Link } from "@inertiajs/react"
+
+export const cargoProviderColumns: ColumnDef<CargoProvider>[] = [
+  {
+    accessorKey: "name",
+    header: "Nome",
+    enableSorting: true,
+  },
+  {
+    accessorKey: "email",
+    header: "Email",
+    enableSorting: true,
+  },
+  {
+    id: "actions",
+    cell: ({ row }) => {
+      const provider = row.original
+      return (
+        <div className="flex gap-2">
+          <Link href={route('cargo-providers.show', provider.id)}>
+            <Button variant="ghost" size="sm">Visualizza</Button>
+          </Link>
+          <Link href={route('cargo-providers.edit', provider.id)}>
+            <Button variant="ghost" size="sm">Modifica</Button>
+          </Link>
+        </div>
+      )
+    },
+  },
+]
+```
+
+## Localizzazione (i18n)
+
+- **SEMPRE** usare stringhe di traduzione che arrivano da Laravel
+- **NON** usare file di traduzione JavaScript/TypeScript
+- Le traduzioni devono essere passate da Laravel tramite props Inertia o shared data
+
+### Pattern Localizzazione
+
+**Backend (Laravel):**
+```php
+// Nel Controller
+return Inertia::render('Domains/CargoProvider/Index', [
+    'cargoProviders' => $providers,
+    'translations' => [
+        'name' => __('cargo_provider.name'),
+        'email' => __('cargo_provider.email'),
+        'create' => __('cargo_provider.actions.create'),
+        'edit' => __('cargo_provider.actions.edit'),
+        // ... altre traduzioni necessarie
+    ],
+]);
+```
+
+Oppure tramite **Shared Data** (per traduzioni globali):
+```php
+// app/Http/Middleware/HandleInertiaRequests.php
+public function share(Request $request): array
+{
+    return [
+        'translations' => [
+            'common' => [
+                'save' => __('common.save'),
+                'cancel' => __('common.cancel'),
+                'delete' => __('common.delete'),
+                'edit' => __('common.edit'),
+                'create' => __('common.create'),
+            ],
+            'validation' => [
+                'required' => __('validation.required'),
+                'email' => __('validation.email'),
+                // ...
+            ],
+        ],
+    ];
+}
+```
+
+**Frontend (React/TypeScript):**
+```tsx
+// resources/js/Pages/Domains/CargoProvider/Index.tsx
+import { PageProps } from '@/types'
+import { CargoProviderTable } from '@/Components/domains/cargo-provider/CargoProviderTable'
+
+interface Props extends PageProps {
+  cargoProviders: CargoProvider[];
+  translations: {
+    name: string;
+    email: string;
+    create: string;
+    edit: string;
+  };
+}
+
+export default function Index({ cargoProviders, translations }: Props) {
+  return (
+    <div>
+      <h1>{translations.name}</h1>
+      <CargoProviderTable 
+        data={cargoProviders}
+        translations={translations}
+      />
+    </div>
+  );
+}
+```
+
+**Hook per traduzioni (opzionale):**
+```tsx
+// resources/js/Hooks/useTranslations.ts
+import { usePage } from '@inertiajs/react';
+import { PageProps } from '@/types';
+
+export function useTranslations() {
+  const { translations } = usePage<PageProps>().props;
+  
+  return (key: string, domain?: string) => {
+    if (domain) {
+      return translations?.[domain]?.[key] || key;
+    }
+    // Cerca in tutti i domini
+    const keys = key.split('.');
+    let value: any = translations;
+    for (const k of keys) {
+      value = value?.[k];
+      if (!value) return key;
+    }
+    return value || key;
+  };
+}
+
+// Uso
+const t = useTranslations();
+const nameLabel = t('name', 'cargo_provider');
+```
+
+**Esempio in Componente:**
+```tsx
+// resources/js/Components/custom/forms/FormField.tsx
+interface FormFieldProps {
+  label: string; // Label già tradotta da Laravel
+  // ...
+}
+
+// Nel Controller Laravel
+return Inertia::render('Create', [
+    'formLabels' => [
+        'name' => __('cargo_provider.form.name'),
+        'email' => __('cargo_provider.form.email'),
+    ],
+]);
+```
+
+### Struttura File Traduzioni Laravel
+
+```
+resources/lang/
+  it/
+    cargo_provider.php
+    common.php
+    validation.php
+  en/
+    cargo_provider.php
+    common.php
+    validation.php
+```
+
+**Esempio file traduzione:**
+```php
+// resources/lang/it/cargo_provider.php
+return [
+    'name' => 'Nome',
+    'email' => 'Email',
+    'actions' => [
+        'create' => 'Crea',
+        'edit' => 'Modifica',
+        'delete' => 'Elimina',
+    ],
+    'messages' => [
+        'created' => 'Cargo provider creato con successo',
+        'updated' => 'Cargo provider aggiornato con successo',
+        'deleted' => 'Cargo provider eliminato',
+    ],
+];
+```
+
+### Regole Localizzazione
+
+- **NON** creare file `resources/js/locales/` o simili
+- **NON** usare librerie i18n JavaScript (i18next, react-intl, ecc.)
+- **SEMPRE** passare traduzioni da Laravel via props Inertia
+- Usare `__()` helper di Laravel per le traduzioni
+- Le traduzioni devono seguire la struttura del dominio (`cargo_provider.name`)
+- Per traduzioni globali, usare shared data Inertia
+- Mantenere coerenza: stesso prefisso per dominio (vedi backend-rules.mdc `LANG_PREFIX`)
+
+### Helper Frontend per Traduzioni
+
+```tsx
+// resources/js/lib/translations.ts
+import { PageProps } from '@/types';
+
+/**
+ * Ottiene traduzione dal page props
+ */
+export function getTranslation(
+  translations: Record<string, any>,
+  key: string,
+  fallback?: string
+): string {
+  const keys = key.split('.');
+  let value: any = translations;
+  
+  for (const k of keys) {
+    value = value?.[k];
+    if (!value) return fallback || key;
+  }
+  
+  return value || fallback || key;
+}
+
+// Uso
+const label = getTranslation(props.translations, 'cargo_provider.name', 'Nome');
+```
