@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     working_dir: /var/www/html
     ports:
-      - "8473:5173"
+      - "5173:5173"
     volumes:
       - ./src:/var/www/html
       - composer_cache:/tmp/composer
@@ -16,6 +16,7 @@ services:
       PHP_IDE_CONFIG: "serverName=zelante"
     depends_on:
       - mysql
+      - redis
     networks:
       - zelante
 
@@ -35,14 +36,14 @@ services:
       - zelante
 
   mysql:
-    image: mysql:8.4
+    image: mysql:8.0.45
     container_name: zelante-mysql
     restart: unless-stopped
+    ports:
+      - "5011:3306" # Navicat / client esterni: localhost:5011
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: zelante
-      MYSQL_USER: zelante
-      MYSQL_PASSWORD: zelante
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d
@@ -102,6 +103,19 @@ services:
       - zelante
     command: redis-server --appendonly yes
 
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: zelante-redisinsight
+    restart: unless-stopped
+    ports:
+      - "8482:5540" # UI: http://localhost:8482 — in-app: host redis, porta 6379
+    volumes:
+      - redisinsight_data:/data
+    depends_on:
+      - redis
+    networks:
+      - zelante
+
   mailpit:
     image: axllent/mailpit:latest
     container_name: zelante-mailpit
@@ -112,11 +126,32 @@ services:
     networks:
       - zelante
 
+  horizon:
+    build:
+      context: ./php
+      dockerfile: Dockerfile
+    image: zelante-php
+    container_name: zelante-horizon
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./src:/var/www/html
+      - composer_cache:/tmp/composer
+    command: php artisan horizon
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - zelante
+    environment:
+      PHP_IDE_CONFIG: "serverName=zelante"
+
 volumes:
   mysql_data:
   jenkins_home:
   composer_cache:
   redis_data:
+  redisinsight_data:
 
 networks:
   zelante:
