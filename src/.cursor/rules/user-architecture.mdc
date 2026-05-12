@@ -2,19 +2,20 @@
 alwaysApply: true
 ---
 
-# Architettura Utenti: Members e Customers
+# Architettura Utenti: Members, Sub-Members, Customers e Admin
 
 ## Panoramica
 
-Il progetto ha una struttura multi-tenant con tre tipi di utenti:
-- **Members (Owner)**: utenti che acquistano il servizio con piani di licenza, proprietari del tenant
+Il progetto ha una struttura multi-account con quattro tipi di utenti:
+- **Admin**: amministratore del sistema, vede tutto (bypass account isolation)
+- **Members (Owner)**: utenti che acquistano il servizio con piani di licenza, proprietari dell'account
 - **Sub-Members**: membri con permessi limitati, dipendenti/dipendenti del Member Owner
 - **Customers**: utenti dei Members con accesso limitato alla piattaforma
 
 ## Architettura Database
 
 ### Tabella `users` (Autenticazione Base)
-Tutti gli utenti (Members e Customers) hanno un record in questa tabella per l'autenticazione.
+Tutti gli utenti (Admin, Members, Sub-Members, Customers) hanno un record in questa tabella per l'autenticazione.
 
 **Campi base Laravel**:
 - `id` (bigint, primary key)
@@ -27,11 +28,11 @@ Tutti gli utenti (Members e Customers) hanno un record in questa tabella per l'a
 - `deleted_at` (timestamp, nullable) - Soft Delete
 
 **Campi aggiuntivi**:
-- `user_type` (string, enum: 'member', 'sub_member', 'customer') - tipo di utente
+- `user_type` (string, enum: 'admin', 'member', 'sub_member', 'customer') - tipo di utente
 - `is_active` (boolean, default: true) - stato attivo/disattivo
 
 ### Tabella `members`
-Rappresenta sia i membri proprietari del tenant che i sub-members con permessi limitati.
+Rappresenta sia i membri proprietari dell'account che i sub-members con permessi limitati.
 
 **Relazioni**:
 - `user_id` (bigint, foreign key → users.id, unique) - relazione 1:1 con users
@@ -42,7 +43,7 @@ Rappresenta sia i membri proprietari del tenant che i sub-members con permessi l
 - `id` (bigint, primary key)
 - `user_id` (bigint, unique, foreign key)
 - `parent_member_id` (bigint, foreign key, nullable) - **IMPORTANTE**: 
-  - NULL = Member Owner (proprietario del tenant)
+  - NULL = Member Owner (proprietario dell'account)
   - NOT NULL = Sub-Member (dipendente/dipendente del Member Owner)
 - `license_plan_id` (bigint, foreign key, nullable) - solo per owner, NULL per sub-members
 - `is_owner` (boolean, default: false) - flag per identificare rapidamente se è owner
@@ -52,11 +53,15 @@ Rappresenta sia i membri proprietari del tenant che i sub-members con permessi l
 - `last_name` (string, nullable) - per sub-members
 - `subscription_started_at` (timestamp, nullable) - solo per owner
 - `subscription_ends_at` (timestamp, nullable) - solo per owner
+- `trial_ends_at` (timestamp, nullable) - solo per owner
+- `is_trial` (boolean, default: false) - solo per owner
 - `max_customers` (integer, nullable) - limite customers in base al piano (solo per owner)
-- `max_users` (integer, nullable) - limite utenti in base al piano (solo per owner)
 - `max_sub_members` (integer, nullable) - limite sub-members in base al piano (solo per owner)
 - `settings` (json, nullable) - configurazioni personalizzate del membro
 - `permissions` (json, nullable) - permessi specifici per sub-members (override dei permessi di base)
+- `stripe_customer_id` (string, nullable) - ID cliente Stripe
+- `stripe_subscription_id` (string, nullable) - ID subscription Stripe
+- `subscription_status` (string, nullable) - stato subscription (active, trial, cancelled, past_due)
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
 - `deleted_at` (timestamp, nullable) - Soft Delete
@@ -64,20 +69,45 @@ Rappresenta sia i membri proprietari del tenant che i sub-members con permessi l
 **Note**:
 - Se `parent_member_id` è NULL e `is_owner = true` → Member Owner
 - Se `parent_member_id` è NOT NULL e `is_owner = false` → Sub-Member
-- I Sub-Members condividono lo stesso tenant del Member Owner (`parent_member_id`)
+- I Sub-Members condividono lo stesso account del Member Owner (`parent_member_id`)
+
+### Tabella `accounts`
+Rappresenta gli utenti che accedono al pannello di amministrazione (Admin e altri ruoli amministrativi).
+
+**Relazioni**:
+- `user_id` (bigint, foreign key → users.id, unique) - relazione 1:1 con users
+
+**Campi specifici**:
+- `id` (bigint, primary key)
+- `user_id` (bigint, unique, foreign key)
+- `first_name` (string, nullable)
+- `last_name` (string, nullable)
+- `department` (string, nullable) - dipartimento/ufficio
+- `role_level` (string, nullable) - livello di accesso (es: 'super_admin', 'admin', 'moderator')
+- `notes` (text, nullable) - note aggiuntive
+- `last_login_at` (timestamp, nullable) - ultimo accesso
+- `settings` (json, nullable) - configurazioni personalizzate dell'account
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+- `deleted_at` (timestamp, nullable) - Soft Delete
+
+**Note**:
+- Gli Admin hanno un record in questa tabella per gestire informazioni aggiuntive
+- Non hanno account isolation (vedono tutto)
+- Possono avere diversi `role_level` per gestire livelli di accesso amministrativo
 
 ### Tabella `customers`
 Rappresenta i clienti dei Members (Owner) con accesso limitato.
 
 **Relazioni**:
 - `user_id` (bigint, foreign key → users.id, unique) - relazione 1:1 con users
-- `member_id` (bigint, foreign key → members.id) - Member Owner proprietario (tenant)
+- `member_id` (bigint, foreign key → members.id) - Member Owner proprietario (account)
   - **IMPORTANTE**: Si riferisce sempre al Member Owner (`is_owner = true`), non ai Sub-Members
 
 **Campi specifici**:
 - `id` (bigint, primary key)
 - `user_id` (bigint, unique, foreign key)
-- `member_id` (bigint, foreign key) - **IMPORTANTE**: identifica il tenant
+- `member_id` (bigint, foreign key) - **IMPORTANTE**: identifica il account
 - `first_name` (string)
 - `last_name` (string)
 - `phone` (string, nullable)
@@ -87,19 +117,57 @@ Rappresenta i clienti dei Members (Owner) con accesso limitato.
 - `updated_at` (timestamp)
 - `deleted_at` (timestamp, nullable) - Soft Delete
 
-### Tabella `license_plans` (se non esiste)
+### Tabella `custom_permissions`
+Gestisce permessi custom per **Account** (admin) e **Sub-Members** (Member).
+
+**Relazioni**:
+- `permissionable_type` + `permissionable_id` (polymorphic: `Account` | `Member`)
+- `granted_by` (foreign key → users.id, nullable) - chi ha concesso il permesso
+
+**Campi specifici**:
+- `id` (bigint, primary key)
+- `permissionable_type` (string) - tipo: `App\Models\Account` o `App\Models\Member`
+- `permissionable_id` (bigint) - ID dell'Account o Member
+- `domain` (string) - dominio del permesso (es: 'cargo_provider', 'dashboard')
+- `permission` (string) - permesso specifico (es: 'index', 'create', 'update', 'delete')
+- `granted` (boolean, default: true) - true = concesso, false = negato esplicitamente
+- `granted_by` (bigint, foreign key, nullable) - ID utente che ha concesso il permesso
+- `notes` (text, nullable) - note sul permesso
+- `expires_at` (timestamp, nullable) - scadenza permesso (opzionale, per permessi temporanei)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+- `deleted_at` (timestamp, nullable) - Soft Delete
+
+**Indici**:
+- `(permissionable_type, permissionable_id, domain, permission)` - unique
+- `(permissionable_type, permissionable_id)` - query per utente
+- `(domain, permission)` - query per dominio
+- `(granted_by)` - query per chi ha concesso
+- `(expires_at)` - query per permessi in scadenza
+- `(deleted_at)` - soft delete
+
+**Note**:
+- Permessi custom hanno **priorità** su Spatie Permission
+- Permessi custom hanno **priorità** su JSON permissions (backward compatibility per Sub-Members)
+- Admin: se ha custom permission → usa quello, altrimenti bypass completo (vede tutto)
+- Sub-Members: custom permission > JSON permission > default (false)
+
+### Tabella `license_plans`
 Piani di licenza per i Members.
 
 **Campi**:
 - `id` (bigint, primary key)
-- `name` (string) - es: "Basic", "Professional", "Enterprise"
+- `name` (string) - es: "Free", "Basic", "Professional", "Enterprise"
 - `slug` (string, unique)
 - `description` (text, nullable)
 - `price` (decimal, nullable)
-- `max_customers` (integer, nullable)
-- `max_users` (integer, nullable)
+- `billing_period` (string, nullable) - monthly, yearly
+- `trial_days` (integer, default: 0) - giorni di trial
+- `max_customers` (integer, nullable) - NULL = illimitato
+- `max_sub_members` (integer, nullable) - NULL = illimitato
 - `features` (json, nullable) - feature del piano
 - `is_active` (boolean, default: true)
+- `sort_order` (integer, default: 0)
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
 - `deleted_at` (timestamp, nullable)
@@ -113,12 +181,12 @@ Piani di licenza per i Members.
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use SoftDeletes;
+    use SoftDeletes, HasRoles;
 
     protected $fillable = [
         'email',
@@ -143,6 +211,11 @@ class User extends Authenticatable
         return $this->hasOne(Customer::class);
     }
 
+    public function account(): HasOne
+    {
+        return $this->hasOne(Account::class);
+    }
+
     // Helper methods
     public function isMember(): bool
     {
@@ -164,9 +237,18 @@ class User extends Authenticatable
         return $this->user_type === 'customer';
     }
 
+    public function isAdmin(): bool
+    {
+        return $this->hasRole('admin');
+    }
+
     // Accessor per ottenere il profilo completo
     public function profile()
     {
+        if ($this->isAdmin()) {
+            return $this->account;
+        }
+        
         if ($this->isCustomer()) {
             return $this->customer;
         }
@@ -174,9 +256,14 @@ class User extends Authenticatable
         return $this->member;
     }
 
-    // Ottenere il Member Owner del tenant corrente
+    // Ottenere il Member Owner dell'account corrente
     public function getOwnerMember(): ?Member
     {
+        // Admin non ha account, vede tutto
+        if ($this->isAdmin()) {
+            return null;
+        }
+
         if ($this->isMemberOwner()) {
             return $this->member;
         }
@@ -212,20 +299,34 @@ class Member extends Model
 
     protected $fillable = [
         'user_id',
+        'parent_member_id',
         'license_plan_id',
+        'is_owner',
         'company_name',
         'company_vat',
+        'first_name',
+        'last_name',
         'subscription_started_at',
         'subscription_ends_at',
+        'trial_ends_at',
+        'is_trial',
         'max_customers',
-        'max_users',
+        'max_sub_members',
         'settings',
+        'permissions',
+        'stripe_customer_id',
+        'stripe_subscription_id',
+        'subscription_status',
     ];
 
     protected $casts = [
+        'is_owner' => 'boolean',
+        'is_trial' => 'boolean',
         'subscription_started_at' => 'datetime',
         'subscription_ends_at' => 'datetime',
+        'trial_ends_at' => 'datetime',
         'settings' => 'array',
+        'permissions' => 'array',
     ];
 
     // Relazioni
@@ -271,11 +372,98 @@ class Member extends Model
         return $this->isOwner() ? $this : $this->ownerMember;
     }
 
+    // Verifica permessi per Sub-Members
+    public function canAccessDomain(string $domain, string $permission): bool
+    {
+        if ($this->isOwner()) {
+            return true; // Owner ha sempre accesso completo
+        }
+
+        if ($this->isSubMember()) {
+            $permissions = $this->permissions ?? [];
+            return $permissions['domains'][$domain][$permission] ?? false;
+        }
+
+        return false;
+    }
+
     // Activity Log
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['company_name', 'first_name', 'last_name', 'license_plan_id', 'parent_member_id', 'max_customers', 'permissions'])
+            ->logOnly([
+                'company_name',
+                'first_name',
+                'last_name',
+                'license_plan_id',
+                'parent_member_id',
+                'max_customers',
+                'max_sub_members',
+                'permissions',
+                'subscription_status',
+                'is_trial',
+            ])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
+}
+```
+
+### Account Model
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
+
+class Account extends Model
+{
+    use SoftDeletes, LogsActivity;
+
+    protected $fillable = [
+        'user_id',
+        'first_name',
+        'last_name',
+        'department',
+        'role_level',
+        'notes',
+        'last_login_at',
+        'settings',
+    ];
+
+    protected $casts = [
+        'last_login_at' => 'datetime',
+        'settings' => 'array',
+    ];
+
+    // Relazioni
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    // Helper
+    public function fullName(): string
+    {
+        return trim("{$this->first_name} {$this->last_name}") ?: $this->user->name ?? '';
+    }
+
+    // Activity Log
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'first_name',
+                'last_name',
+                'department',
+                'role_level',
+                'notes',
+                'last_login_at',
+            ])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs();
     }
@@ -292,10 +480,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use App\Traits\BelongsToAccount;
 
 class Customer extends Model
 {
-    use SoftDeletes, LogsActivity;
+    use SoftDeletes, LogsActivity, BelongsToAccount;
 
     protected $fillable = [
         'user_id',
@@ -322,144 +511,308 @@ class Customer extends Model
         return $this->belongsTo(Member::class);
     }
 
-    // Activity Log
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['first_name', 'last_name', 'member_id'])
-            ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
-    }
-
     // Helper
     public function fullName(): string
     {
         return "{$this->first_name} {$this->last_name}";
     }
-}
-```
 
-## Multi-Tenancy e Scoping
-
-### Global Scope per Tenant Isolation
-Tutti gli utenti (Members, Sub-Members, Customers) devono vedere solo i dati del loro tenant (Member Owner):
-
-```php
-// Helper trait per models che necessitano tenant scoping
-trait BelongsToTenant
-{
-    protected static function bootBelongsToTenant()
+    // Activity Log
+    public function getActivitylogOptions(): LogOptions
     {
-        static::addGlobalScope('tenant', function (Builder $builder) {
-            if (auth()->check()) {
-                $ownerMember = auth()->user()->getOwnerMember();
-                if ($ownerMember) {
-                    $builder->where('member_id', $ownerMember->id);
-                }
-            }
-        });
+        return LogOptions::defaults()
+            ->logOnly([
+                'first_name',
+                'last_name',
+                'member_id',
+                'phone',
+                'address',
+            ])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
     }
 }
+```
 
-// Nei models che necessitano tenant scoping (es: Customer, altre entità tenant-specific)
-class SomeModel extends Model
+### CustomPermission Model
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
+
+class CustomPermission extends Model
 {
-    use BelongsToTenant;
-    
-    // Il global scope applicherà automaticamente il filtro per member_id
+    use SoftDeletes, LogsActivity;
+
+    protected $fillable = [
+        'permissionable_type',
+        'permissionable_id',
+        'domain',
+        'permission',
+        'granted',
+        'granted_by',
+        'notes',
+        'expires_at',
+    ];
+
+    protected $casts = [
+        'granted' => 'boolean',
+        'expires_at' => 'datetime',
+    ];
+
+    // Relazioni
+    public function permissionable(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    public function grantedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'granted_by');
+    }
+
+    // Helper methods
+    public function isExpired(): bool
+    {
+        return $this->expires_at && $this->expires_at->isPast();
+    }
+
+    public function isActive(): bool
+    {
+        return !$this->isExpired();
+    }
+
+    // Scope
+    public function scopeActive($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('expires_at')
+              ->orWhere('expires_at', '>', now());
+        });
+    }
+
+    public function scopeForDomain($query, string $domain)
+    {
+        return $query->where('domain', $domain);
+    }
+
+    public function scopeForPermission($query, string $permission)
+    {
+        return $query->where('permission', $permission);
+    }
+
+    public function scopeGranted($query)
+    {
+        return $query->where('granted', true);
+    }
+
+    public function scopeDenied($query)
+    {
+        return $query->where('granted', false);
+    }
+
+    // Activity Log
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'domain',
+                'permission',
+                'granted',
+                'granted_by',
+                'notes',
+                'expires_at',
+            ])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
 }
 ```
 
-### Global Scope per Customers
-I Customers devono vedere solo i dati del loro Member Owner (tenant):
+### LicensePlan Model
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class LicensePlan extends Model
+{
+    use SoftDeletes;
+
+    protected $fillable = [
+        'name',
+        'slug',
+        'description',
+        'price',
+        'billing_period',
+        'trial_days',
+        'max_customers',
+        'max_sub_members',
+        'features',
+        'is_active',
+        'sort_order',
+    ];
+
+    protected $casts = [
+        'price' => 'decimal:2',
+        'trial_days' => 'integer',
+        'max_customers' => 'integer',
+        'max_sub_members' => 'integer',
+        'features' => 'array',
+        'is_active' => 'boolean',
+        'sort_order' => 'integer',
+    ];
+
+    // Relazioni
+    public function members(): HasMany
+    {
+        return $this->hasMany(Member::class);
+    }
+
+    // Scope
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('sort_order');
+    }
+}
+```
+
+## Multi-account e Scoping
+
+### Admin: Bypass Account Isolation
+
+**IMPORTANTE**: L'admin vede TUTTO, senza filtri account. Questo è gestito automaticamente dal trait `BelongsToAccount` e dal middleware `AccountScope`.
+
+### Global Scope per Account Isolation
+
+Tutti gli utenti (Members, Sub-Members, Customers) devono vedere solo i dati del loro account (Member Owner), tranne Admin che vede tutto:
 
 ```php
-// In Customer Model
-protected static function booted()
+// Trait BelongsToAccount per models che necessitano account scoping
+// app/Traits/BelongsToAccount.php
+
+protected static function bootBelongsToAccount(): void
 {
-    static::addGlobalScope('member', function (Builder $builder) {
-        if (auth()->check() && auth()->user()->isCustomer()) {
-            $builder->where('member_id', auth()->user()->customer->member_id);
+    static::addGlobalScope('account', function (Builder $builder) {
+        if (Auth::check()) {
+            $user = Auth::user();
+            
+            // Admin vede tutto - bypass account isolation
+            if ($user->isAdmin()) {
+                return; // Nessun filtro per admin
+            }
+            
+            $ownerMember = $user->getOwnerMember();
+            
+            if ($ownerMember) {
+                // Filtra per member_id dell'account
+                $builder->where('member_id', $ownerMember->id);
+            } else {
+                // Se non c'è owner member, non mostrare nulla
+                $builder->whereRaw('1 = 0');
+            }
+        } else {
+            // Utente non autenticato: non mostrare nulla
+            $builder->whereRaw('1 = 0');
         }
     });
 }
 ```
 
-### Middleware per Tenant Isolation
+### Uso nel Model
+
 ```php
-namespace App\Http\Middleware;
+// Nei models che necessitano account scoping (es: Customer, altre entità account-specific)
+use App\Traits\BelongsToAccount;
 
-use Illuminate\Support\Facades\Auth;
-
-class TenantScope
+class SomeModel extends Model
 {
-    public function handle($request, Closure $next)
-    {
-        if (Auth::check()) {
-            $user = Auth::user();
-            $ownerMember = $user->getOwnerMember();
+    use BelongsToAccount;
+    
+    // Il global scope applicherà automaticamente il filtro per member_id
+    // Admin vedrà tutto automaticamente (bypass)
+}
+```
+
+### Middleware per Account Isolation
+
+```php
+// app/Http/Middleware/AccountScope.php
+
+public function handle(Request $request, Closure $next): Response
+{
+    if (Auth::check()) {
+        $user = Auth::user();
+        
+        // Admin vede tutto - bypass account isolation
+        if ($user->isAdmin()) {
+            $request->attributes->set('account_member_id', null);
+            $request->attributes->set('bypass_account_isolation', true);
+            return $next($request);
+        }
+        
+        $ownerMember = $user->getOwnerMember();
+        
+        if ($ownerMember) {
+            // Impostare il member_id dell'account nel request per uso globale
+            $request->attributes->set('account_member_id', $ownerMember->id);
             
-            if ($ownerMember) {
-                // Impostare il member_id del tenant nel request per uso globale
-                $request->attributes->set('tenant_member_id', $ownerMember->id);
-                
-                // Se è un Sub-Member, potrebbe avere permessi limitati
-                if ($user->isSubMember()) {
-                    // Logica per limitare accesso basata sui permessi del sub-member
-                    // I permessi sono in $user->member->permissions (JSON)
-                }
+            // Se è un Sub-Member, potrebbe avere permessi limitati
+            if ($user->isSubMember() && $user->member) {
+                $request->attributes->set('sub_member_permissions', $user->member->permissions ?? []);
             }
         }
-
-        return $next($request);
     }
+
+    return $next($request);
 }
 ```
 
 ## Permessi e Ruoli (Spatie Permission)
 
 ### Ruoli Predefiniti
-- `member_owner` - Membro proprietario del tenant (permessi completi)
-- `sub_member` - Sub-Membro con permessi limitati
-- `customer` - Cliente del membro (permessi molto limitati)
+- **`admin`** - Amministratore del sistema (vede tutto, bypass account isolation)
+- **`member_owner`** - Membro proprietario dell'account (permessi completi sul proprio account)
+- **`sub_member`** - Sub-Membro con permessi limitati
+- **`customer`** - Cliente del membro (permessi molto limitati)
 
 ### Permessi per Tipo Utente
 
+#### Admin
+- **Bypass completo account isolation**: vede tutti i dati di tutti i account
+- **Permessi**: di default bypass completo (vede tutto), ma può avere permessi custom limitati nella tabella `custom_permissions`
+- Può gestire tutti i Members, Customers, Sub-Members
+- Accesso a configurazioni globali del sistema
+- Se ha un permesso custom definito → usa quello (può essere negato esplicitamente)
+- Se NON ha permesso custom → bypass completo (vede tutto)
+
 #### Member Owner
-- Permessi completi su tutti i domini del loro tenant
+- Permessi completi su tutti i domini del loro account
 - Gestione Sub-Members, Customers, configurazioni
 - Accesso completo alle funzionalità del piano di licenza
 
 #### Sub-Member
-- Permessi limitati definiti in `members.permissions` (JSON)
+- **Permessi**: definiti tramite `custom_permissions` (priorità) oppure `members.permissions` (JSON, backward compatibility)
 - Possono avere permessi su domini specifici (es: solo lettura, solo alcuni domini)
+- Permessi custom possono essere temporanei (con `expires_at`)
 - Non possono:
   - Gestire il piano di licenza
   - Creare/eliminare altri Members o Sub-Members (solo owner può)
-  - Modificare configurazioni globali del tenant
-- Esempio struttura `permissions` JSON:
-  ```json
-  {
-    "domains": {
-      "cargo_provider": {
-        "index": true,
-        "show": true,
-        "store": true,
-        "update": false,
-        "destroy": false,
-        "export": true
-      },
-      "invoices": {
-        "index": true,
-        "show": true,
-        "store": false,
-        "update": false,
-        "destroy": false,
-        "export": false
-      }
-    }
-  }
-  ```
+  - Modificare configurazioni globali dell'account
 
 #### Customer
 - Permessi molto limitati (solo lettura su dati condivisi)
@@ -469,6 +822,9 @@ class TenantScope
 ### Assegnazione Ruoli
 Quando si crea un User:
 ```php
+// Per Admin
+$user->assignRole('admin');
+
 // Per Member Owner
 $user->assignRole('member_owner');
 
@@ -480,46 +836,96 @@ $user->assignRole('sub_member');
 $user->assignRole('customer');
 ```
 
-### Verifica Permessi per Sub-Members
+### Logica di Verifica Permessi
+
+**Ordine di priorità** (per tutti i tipi di utente):
+1. **Admin**: Custom Permission (se esiste) → quello, altrimenti → bypass completo
+2. **Member Owner**: Sempre accesso completo sul proprio account
+3. **Sub-Member**: Custom Permission → JSON Permission → Default (false)
+4. **Customer e altri**: Spatie Permission
+
+**Helper methods disponibili**:
+
 ```php
-// Helper nel Member Model
-public function canAccessDomain(string $domain, string $permission): bool
-{
-    if ($this->isOwner()) {
-        return true; // Owner ha sempre accesso completo
-    }
+// User Model - Verifica accesso unificato
+$user->canAccess('dashboard', 'index'); // Verifica permesso per qualsiasi tipo utente
 
-    if ($this->isSubMember()) {
-        $permissions = $this->permissions ?? [];
-        return $permissions['domains'][$domain][$permission] ?? false;
-    }
+// Account Model - Gestione permessi custom per Admin
+$account->hasCustomPermission('dashboard', 'index'); // ?bool (null = nessun override)
+$account->grantPermission('dashboard', 'index', $grantedBy, 'notes', $expiresAt);
+$account->denyPermission('dashboard', 'index', $grantedBy, 'notes');
+$account->removePermission('dashboard', 'index');
 
-    return false;
-}
+// Member Model - Gestione permessi custom per Sub-Members
+$member->canAccessDomain('dashboard', 'index'); // bool (verifica custom + JSON)
+$member->grantPermission('dashboard', 'index', $grantedBy, 'notes', $expiresAt);
+$member->denyPermission('dashboard', 'index', $grantedBy, 'notes');
+$member->removePermission('dashboard', 'index');
+```
+
+**Esempio di utilizzo**:
+```php
+// Assegnare permesso a Sub-Member
+$subMember = Member::find($id);
+$subMember->grantPermission(
+    'cargo_provider',
+    'index',
+    auth()->id(), // granted_by
+    'Permesso concesso per gestione cargo',
+    now()->addMonths(3) // expires_at (opzionale)
+);
+
+// Nega permesso a Admin
+$adminAccount = Account::find($id);
+$adminAccount->denyPermission(
+    'billing',
+    'delete',
+    auth()->id(),
+    'Limite per sicurezza'
+);
 ```
 
 ### Middleware per Verifica Permessi Sub-Member
 ```php
-namespace App\Http\Middleware;
+// app/Http/Middleware/CheckSubMemberPermissions.php
 
-class CheckSubMemberPermissions
+public function handle(Request $request, Closure $next, string $domain, string $permission): Response
 {
-    public function handle($request, Closure $next, string $domain, string $permission)
-    {
-        $user = auth()->user();
-        
-        if ($user->isSubMember() && $user->member) {
-            if (!$user->member->canAccessDomain($domain, $permission)) {
-                abort(403, 'Non hai i permessi per questa azione');
-            }
-        }
-
+    $user = Auth::user();
+    
+    // Admin e Member Owner hanno sempre accesso
+    if ($user->isAdmin() || $user->isMemberOwner()) {
         return $next($request);
     }
+    
+    // Verifica permessi per Sub-Members
+    if ($user->isSubMember() && $user->member) {
+        if (!$user->member->canAccessDomain($domain, $permission)) {
+            abort(403, 'Non hai i permessi per questa azione');
+        }
+    }
+    
+    // Customer non dovrebbero mai arrivare qui (dovrebbero essere bloccati prima)
+    if ($user->isCustomer()) {
+        abort(403, 'Accesso negato');
+    }
+
+    return $next($request);
 }
 ```
 
 ## Registrazione e Creazione Utenti
+
+### Creazione Admin
+1. Creare User con `user_type = 'admin'`
+2. Creare Account con:
+   - `user_id` = ID del User
+   - `first_name`, `last_name` (opzionali)
+   - `department` (opzionale) - dipartimento/ufficio
+   - `role_level` (opzionale) - livello di accesso (es: 'super_admin', 'admin', 'moderator')
+   - `notes` (opzionale) - note aggiuntive
+3. Assegnare ruolo 'admin'
+4. **IMPORTANTE**: Admin ha un record in `accounts`, NON in `members` o `customers`
 
 ### Creazione Member Owner
 1. Creare User con `user_type = 'member'`
@@ -546,194 +952,71 @@ class CheckSubMemberPermissions
 ### Creazione Customer
 1. Verificare che il Member Owner abbia ancora spazio (`max_customers`)
 2. Creare User con `user_type = 'customer'`
-3. Creare Customer con riferimento a User e Member Owner (tenant)
+3. Creare Customer con riferimento a User e Member Owner (account)
 4. Assegnare ruolo 'customer'
 5. **NOTA**: Sia Member Owner che Sub-Members (con permesso) possono creare Customers
 
 ## Query e Best Practices
 
-- **SEMPRE** filtrare per `member_id` (del Member Owner) quando si lavora con dati tenant-specific
-- **SEMPRE** verificare che ogni utente possa accedere solo ai dati del suo tenant (Member Owner)
-- Usare `getOwnerMember()` per ottenere sempre il Member Owner corretto
+- **SEMPRE** filtrare per `member_id` (del Member Owner) quando si lavora con dati account-specific
+- **SEMPRE** verificare che ogni utente possa accedere solo ai dati del suo account (Member Owner)
+- **ECCEZIONE**: Admin vede tutto (bypass automatico tramite trait e middleware)
+- Usare `getOwnerMember()` per ottenere sempre il Member Owner corretto (restituisce null per admin)
 - Usare eager loading per evitare N+1: 
   ```php
   $member->load('subMembers.user', 'customers.user')
   ```
 - Quando si accede a `auth()->user()->getOwnerMember()`, considerare cache se necessario
-- **Member Owner**: vede tutti i dati del tenant (Customers, Sub-Members, entità correlate)
-- **Sub-Members**: vedono solo i dati per cui hanno permessi, sempre del loro tenant
+- **Admin**: vede tutti i dati di tutti i account (bypass completo)
+- **Member Owner**: vede tutti i dati dell'account (Customers, Sub-Members, entità correlate)
+- **Sub-Members**: vedono solo i dati per cui hanno permessi, sempre del loro account
 - **Customers**: vedono solo se stessi e i dati condivisi dal Member Owner
 - **IMPORTANTE**: Per i Sub-Members, verificare sempre i permessi specifici prima di permettere azioni
-- Usare scope globali o middleware per applicare automaticamente il filtro tenant
-- I Sub-Members condividono lo stesso tenant del loro Member Owner (`parent_member_id`)
+- Usare scope globali o middleware per applicare automaticamente il filtro account
+- I Sub-Members condividono lo stesso account del loro Member Owner (`parent_member_id`)
 
-## Audit Trail e Storico Dati
+## Middleware e Uso
 
-### Activity Log vs Event Sourcing
+### AccountScope Middleware
 
-Il progetto usa **entrambi** i sistemi di Spatie per tracciare i cambiamenti, ma con scopi diversi:
+Applicare alle route che necessitano account isolation:
 
-#### Activity Log (Spatie Activity Log) - Per Audit Trail
-**Usare per:**
-- Tracciare chi, cosa, quando (audit log)
-- Storico delle modifiche ai modelli
-- Logging delle azioni importanti (create, update, delete)
-- Compliance e accountability
-- Visualizzazione semplice dello storico
-
-**Già implementato in:**
-- Member Model
-- Customer Model
-- Tutti i modelli devono implementarlo (vedi backend-rules.mdc)
-
-**Esempio:**
 ```php
-// Automatico con LogsActivity trait
-$member->update(['company_name' => 'New Name']);
-// Registra automaticamente: user_id, old_value, new_value, timestamp
+Route::middleware(['auth', 'account.scope'])->group(function () {
+    // Route che necessitano account isolation
+    // Admin vedrà tutto automaticamente (bypass)
+});
 ```
 
-#### Event Sourcing (Spatie Event Sourcing) - Per Stato e Ricostruzione
-**Usare per:**
-- Eventi critici di business che devono essere tracciati permanentemente
-- Ricostruzione dello stato del sistema
-- Eventi finanziari, cambi di piano, cancellazioni definitive
-- Time-travel e replay degli eventi
-- Eventi che non possono essere persi
+### CheckSubMemberPermissions Middleware
 
-**Quando implementarlo:**
-- Cambio piano di licenza
-- Cancellazione definitiva di un tenant (hard delete)
-- Eventi finanziari (pagamenti, rimborsi)
-- Cambiamenti critici di configurazione
-- Eventi che richiedono ricostruzione dello stato
+Applicare alle route che necessitano verifica permessi Sub-Member:
 
-**Esempio di Event:**
 ```php
-// app/Events/Member/LicensePlanChanged.php
-class LicensePlanChanged extends ShouldBeStored
-{
-    public function __construct(
-        public int $memberId,
-        public int $oldPlanId,
-        public int $newPlanId,
-        public string $reason
-    ) {}
-}
+Route::middleware(['auth', 'submember.permissions:cargo_provider,index'])->group(function () {
+    // Route protette con permessi specifici
+    // Admin e Member Owner bypassano automaticamente
+});
 ```
 
-### Raccomandazione per il Progetto
+### Esempio Controller con Middleware
 
-**Combinazione consigliata:**
-1. **Activity Log** per tutto:
-   - Tutti i modelli (Member, Customer, User, ecc.)
-   - Modifiche a campi
-   - Azioni CRUD standard
-   - Log di autenticazione/login
-
-2. **Event Sourcing** per eventi critici:
-   - Cambi di piano licenza
-   - Cancellazioni definitive tenant
-   - Eventi finanziari
-   - Eventi di compliance/legal
-
-### Altri Aspetti da Considerare
-
-#### 1. Versioning dei Dati Critici
-Per dati che cambiano frequentemente ma serve storico:
-- Usare tabella `{model}_versions` (polymorphic)
-- Oppure usare Spatie Laravel Backup per backup incrementali
-- Considerare Eloquent Revisionable per versioning semplice
-
-#### 2. Soft Deletes con Storico
-- I soft deletes già implementati mantengono i dati
-- Considerare una tabella `deleted_records_archive` per record eliminati da molto tempo
-- Implementare un job che archivia record eliminati > 1 anno
-
-#### 3. Backup e Disaster Recovery
-- Usare Spatie Laravel Backup (già installato)
-- Backup automatici giornalieri dei database
-- Backup prima di operazioni critiche (cambio piano, cancellazione tenant)
-
-#### 4. Logging Centralizzato
-- Log tutte le azioni sensibili (cambio permessi, cambio ruolo)
-- Usare Laravel Log per log strutturati
-- Considerare integrazione con sistemi esterni (Sentry, Bugsnag)
-
-#### 5. Notifiche per Azioni Critiche
-- Notificare Member Owner quando:
-  - Sub-Member viene creato/eliminato
-  - Customer viene creato/eliminato
-  - Piano di licenza sta per scadere
-  - Limiti raggiunti (max_customers, max_sub_members)
-
-#### 6. Data Retention e Privacy
-- Implementare policy di retention dei dati
-- GDPR compliance: possibilità di export/delete dati utente
-- Archiviazione dati vecchi (es: > 2 anni) in storage separato
-
-#### 7. Jobs e Queue per Operazioni Async
-- Creazione utenti complesse in queue
-- Invio email di benvenuto
-- Sincronizzazione dati esterni
-- Cleanup periodico (log vecchi, sessioni scadute)
-
-#### 8. Middleware per Audit
 ```php
-// Tracciare tutte le richieste importanti
-class AuditMiddleware
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
+
+class CargoProviderController extends Controller implements HasMiddleware
 {
-    public function handle($request, Closure $next)
+    private static string $GATE_PREFIX = 'cargo_provider';
+
+    public static function middleware(): array
     {
-        $response = $next($request);
-        
-        if (auth()->check() && $this->shouldLog($request)) {
-            activity()
-                ->causedBy(auth()->user())
-                ->withProperties([
-                    'ip' => $request->ip(),
-                    'user_agent' => $request->userAgent(),
-                    'url' => $request->fullUrl(),
-                    'method' => $request->method(),
-                ])
-                ->log('API Request');
-        }
-        
-        return $response;
+        return [
+            new Middleware('permission:'.self::$GATE_PREFIX.'.index', only: ['index']),
+            new Middleware('permission:'.self::$GATE_PREFIX.'.create', only: ['create', 'store']),
+            // Admin e Member Owner hanno sempre accesso
+            // Sub-Members verificano permessi tramite Spatie Permission
+        ];
     }
 }
 ```
-
-#### 9. Observers per Eventi Automatici
-```php
-// app/Observers/MemberObserver.php
-class MemberObserver
-{
-    public function created(Member $member)
-    {
-        // Log automatico
-        // Invio notifiche
-        // Creazione risorse correlate
-    }
-    
-    public function deleted(Member $member)
-    {
-        // Soft delete: archiviazione
-        // Hard delete: event sourcing per tracciamento permanente
-    }
-}
-```
-
-### Checklist Implementazione
-
-- [x] Activity Log sui modelli principali
-- [ ] Event Sourcing per eventi critici
-- [ ] Backup automatici configurati
-- [ ] Notifiche per azioni critiche
-- [ ] Data retention policy
-- [ ] GDPR compliance (export/delete)
-- [ ] Audit middleware per richieste sensibili
-- [ ] Observers per eventi automatici
-- [ ] Jobs per operazioni async
-- [ ] Cleanup jobs per dati vecchi
-- [ ] Logging centralizzato strutturato

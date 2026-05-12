@@ -318,6 +318,12 @@ export default function Create() {
 }
 ```
 
+### Layout pagine Create, Edit e Show
+
+- **Full width**: le pagine **Create**, **Edit** e **Show** devono essere **a larghezza piena** rispetto all’area di contenuto dell’app (nessun `max-w-*` / container che restringa la colonna centrale solo su queste viste; usare tutta la larghezza utile come per le altre pagine di dettaglio/modifica previste dal design system).
+- **Barra inferiore sticky**: la barra delle azioni in basso (es. Salva, Annulla, link secondari) deve essere **sticky in fondo al viewport** (`sticky bottom-0` o pattern equivalente) e **sempre visibile** mentre l’utente scorre il form o i dettagli: `z-index` adeguato, sfondo opaco (es. `bg-background`) e bordo/sombra se serve a separarla dal contenuto. Aggiungere **padding-bottom** al contenuto scrollabile così l’ultimo campo non resta nascosto sotto la barra.
+- **Torna alla lista**: il controllo che riporta all’elenco (index) deve mostrare un’**icona freccia verso sinistra** accanto al testo (es. `ArrowLeft` da `lucide-react`), coerente con le altre icone del progetto, non solo etichetta testuale.
+
 ## Separazione Componente-Logica (Hooks)
 
 - **SEMPRE** separare la logica dai componenti usando custom hooks
@@ -635,7 +641,7 @@ Per ogni dominio, creare test per:
 - [ ] **Permissions Owner**: Permessi Member Owner
 - [ ] **Permissions Sub-Member**: Permessi Sub-Member (con/senza permessi)
 - [ ] **Permissions Customer**: Customer non può accedere
-- [ ] **Multi-tenancy**: Isolamento dati per tenant
+- [ ] **Multi-account**: isolamento dati per account (organizzazione)
 
 ### Comandi Test E2E
 

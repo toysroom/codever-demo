@@ -360,7 +360,7 @@ test('service validates required fields before creating', function () {
 **Cosa testare:**
 - Controller: tutte le route e azioni CRUD
 - Permessi: verifica middleware e autorizzazioni
-- Multi-tenancy: isolamento dati per tenant
+- Multi-account: isolamento dati per account (organizzazione / member owner)
 - API responses: status codes, struttura JSON
 - Integrazioni: interazione tra Service e Repository
 
@@ -448,7 +448,7 @@ test('customer cannot access cargo providers', function () {
 
 4. **Multi-Tenancy nei Test**:
    ```php
-   test('user can only see cargo providers of their tenant', function () {
+   test('user can only see cargo providers of their account', function () {
        $owner1 = User::factory()->memberOwner()->create();
        $owner2 = User::factory()->memberOwner()->create();
        
@@ -704,7 +704,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
 ## Caching Strategy
 
 - Usare cache per query costose e dati frequentemente accessibili
-- Cacheare per tenant quando possibile (chiave include member_id)
+- Cacheare per account quando possibile (chiave include member_id)
 - Invalidare cache quando i dati vengono modificati
 
 **Esempio:**
@@ -874,7 +874,7 @@ Route::get('/health', function () {
 - **SEMPRE** validare file upload (tipo, dimensione, mime type)
 - Usare Laravel Storage (dischi: local, s3, ecc.)
 - Salvare percorsi nel database, non file binari
-- Organizzare file per tenant quando applicabile
+- Organizzare file per account quando applicabile
 
 **Form Request per file upload:**
 ```php

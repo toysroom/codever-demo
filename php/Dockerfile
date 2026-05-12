@@ -15,7 +15,11 @@ RUN apt-get update && apt-get install -y \
     lftp \
     rsync \
     default-mysql-client \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip ftp
+
+RUN apt-get install -y libssl-dev \
+    && pecl install redis \
+    && docker-php-ext-enable redis
 
 # Installa Xdebug
 RUN pecl install xdebug \
