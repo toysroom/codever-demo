@@ -1,4 +1,8 @@
 export * from './admin-ui';
+export { EmailNotificationsAreaTabs, type EmailNotificationsAreaTab } from './email-notifications-area-tabs';
+export { EmailNotificationsClearAllButton, type EmailNotificationsClearAllMode } from './email-notifications-clear-all-button';
+export { ConfirmDeleteIconButton } from './confirm-delete-icon-button';
+export { IndexTableRowActions, type IndexTableRowActionsProps } from './index-table-row-actions';
 export { BackToListButton } from './back-to-list-button';
 export { EntityPageChrome } from './entity-page-chrome';
 export { FormField } from './form-field';

@@ -39,7 +39,8 @@ class PriceListController extends Controller
             'updated_at',
         ], 'name');
 
-        $paginator = $this->lists->paginate($perPage, $sf, $sd);
+        $listRead = $this->lists->paginate($perPage, $sf, $sd);
+        $paginator = $listRead->paginator;
         $paginator->withQueryString();
 
         $paginator->setCollection(
@@ -72,6 +73,7 @@ class PriceListController extends Controller
                 'sort_field' => $sf,
                 'sort_order' => $sd,
             ],
+            'productsModuleDataLayer' => $listRead->dataSource,
         ]);
     }
 
@@ -81,6 +83,7 @@ class PriceListController extends Controller
 
         return Inertia::render('modules/products/listini/create', [
             'memberOwners' => $this->memberOwnerOptions(),
+            'productsModuleDataLayer' => null,
         ]);
     }
 
@@ -97,13 +100,15 @@ class PriceListController extends Controller
     {
         $this->authorize('view', $price_list);
 
-        $row = $this->lists->find($price_list->id);
-        if (! $row) {
+        $rowRead = $this->lists->find($price_list->id);
+        $row = $rowRead->model;
+        if (! $row instanceof PriceList) {
             abort(404);
         }
 
         return Inertia::render('modules/products/listini/show', [
             'priceList' => $this->listPayload($row),
+            'productsModuleDataLayer' => $rowRead->dataSource,
         ]);
     }
 
@@ -111,14 +116,16 @@ class PriceListController extends Controller
     {
         $this->authorize('update', $price_list);
 
-        $row = $this->lists->find($price_list->id);
-        if (! $row) {
+        $rowRead = $this->lists->find($price_list->id);
+        $row = $rowRead->model;
+        if (! $row instanceof PriceList) {
             abort(404);
         }
 
         return Inertia::render('modules/products/listini/edit', [
             'priceList' => $this->listPayload($row),
             'memberOwners' => $this->memberOwnerOptions(),
+            'productsModuleDataLayer' => $rowRead->dataSource,
         ]);
     }
 

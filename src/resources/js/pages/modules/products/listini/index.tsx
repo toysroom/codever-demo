@@ -1,13 +1,11 @@
 import {
     CreatedAtContent,
     DataTable,
-    DeleteButton,
-    EditButton,
-    ToggleActiveButton,
+    IndexTableRowActions,
     UpdatedAtContent,
-    ViewButton,
     type DataTablePagination,
 } from '@/components/custom';
+import { ProductsModuleDataLayerBanner } from '@/components/domains/products/products-module-data-layer-banner';
 import { Button } from '@/components/ui/button';
 import { useDataTable, useFlashMessages } from '@/hooks';
 import AppLayout from '@/layouts/app-layout';
@@ -46,9 +44,10 @@ interface Props {
         sort_field: string;
         sort_order: string;
     };
+    productsModuleDataLayer?: 'redis' | 'database' | null;
 }
 
-export default function PriceListsIndex({ priceLists, filters }: Props) {
+export default function PriceListsIndex({ priceLists, filters, productsModuleDataLayer }: Props) {
     const page = usePage<SharedData>();
     const isAdmin = page.props.auth?.user?.user_type === 'admin';
     useFlashMessages();
@@ -78,9 +77,6 @@ export default function PriceListsIndex({ priceLists, filters }: Props) {
     });
 
     const destroyRow = (id: number) => {
-        if (!confirm('Eliminare questo listino?')) {
-            return;
-        }
         router.delete(route('modules.products.listini.destroy', id), { preserveScroll: true });
     };
 
@@ -178,15 +174,16 @@ export default function PriceListsIndex({ priceLists, filters }: Props) {
                 cellAlign: 'right',
                 sortable: false,
                 render: (_, row) => (
-                    <div className="flex justify-end gap-2">
-                        <ToggleActiveButton
-                            isActive={row.is_active !== false}
-                            onClick={() => toggleRow(row.id)}
-                        />
-                        <ViewButton href={route('modules.products.listini.show', row.id)} />
-                        <EditButton href={route('modules.products.listini.edit', row.id)} />
-                        <DeleteButton onClick={() => destroyRow(row.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        toggleActive={{
+                            isActive: row.is_active !== false,
+                            onClick: () => toggleRow(row.id),
+                        }}
+                        showHref={route('modules.products.listini.show', row.id)}
+                        editHref={route('modules.products.listini.edit', row.id)}
+                        onDelete={() => destroyRow(row.id)}
+                        deleteEntityLabel={row.code ? `${row.name} (${row.code})` : row.name}
+                    />
                 ),
             },
         );
@@ -198,6 +195,7 @@ export default function PriceListsIndex({ priceLists, filters }: Props) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Listini" />
             <div className="flex flex-col gap-4 p-4">
+                <ProductsModuleDataLayerBanner layer={productsModuleDataLayer} />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <h1 className="text-xl font-semibold tracking-tight">Listini prezzi</h1>
                     <Button asChild>

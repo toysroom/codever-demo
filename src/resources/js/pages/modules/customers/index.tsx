@@ -1,11 +1,8 @@
 import {
     CreatedAtContent,
     DataTable,
-    DeleteButton,
-    EditButton,
-    ToggleActiveButton,
+    IndexTableRowActions,
     UpdatedAtContent,
-    ViewButton,
     type DataTablePagination,
 } from '@/components/custom';
 import { Button } from '@/components/ui/button';
@@ -83,9 +80,6 @@ export default function CustomersIndex({ customers, filters }: Props) {
     });
 
     const destroyCustomer = (id: number) => {
-        if (!confirm('Eliminare questo cliente?')) {
-            return;
-        }
         router.delete(`/modules/customers/${id}`, { preserveScroll: true });
     };
 
@@ -204,15 +198,16 @@ export default function CustomersIndex({ customers, filters }: Props) {
                 headerClassName: 'text-right',
                 cellAlign: 'right',
                 render: (_, c) => (
-                    <div className="flex justify-end gap-2">
-                        <ToggleActiveButton
-                            isActive={c.is_active !== false}
-                            onClick={() => toggleCustomerActive(c.id)}
-                        />
-                        <ViewButton href={route('modules.customers.show', c.id)} />
-                        <EditButton href={route('modules.customers.edit', c.id)} />
-                        <DeleteButton onClick={() => destroyCustomer(c.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        toggleActive={{
+                            isActive: c.is_active !== false,
+                            onClick: () => toggleCustomerActive(c.id),
+                        }}
+                        showHref={route('modules.customers.show', c.id)}
+                        editHref={route('modules.customers.edit', c.id)}
+                        onDelete={() => destroyCustomer(c.id)}
+                        deleteEntityLabel={`${c.first_name} ${c.last_name}`.trim()}
+                    />
                 ),
             },
         );

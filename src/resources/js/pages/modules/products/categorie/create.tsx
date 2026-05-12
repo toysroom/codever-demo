@@ -1,4 +1,5 @@
 import { FormField, MemberAccountSelect, NativeSelect, StickyReadFooterActions } from '@/components/custom';
+import { ProductsModuleDataLayerBanner } from '@/components/domains/products/products-module-data-layer-banner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import CrudModulePageLayout from '@/layouts/crud-module-page-layout';
@@ -17,9 +18,10 @@ interface ParentOption {
 interface Props {
     memberOwners: MemberOwnerOption[];
     parentOptions: ParentOption[];
+    productsModuleDataLayer?: 'redis' | 'database' | null;
 }
 
-export default function CategoriesCreate({ memberOwners, parentOptions }: Props) {
+export default function CategoriesCreate({ memberOwners, parentOptions, productsModuleDataLayer }: Props) {
     const m0 = memberOwners[0]?.id ?? 0;
 
     const { data, setData, post, processing, errors } = useForm({
@@ -54,6 +56,7 @@ export default function CategoriesCreate({ memberOwners, parentOptions }: Props)
                 </StickyReadFooterActions>
             }
         >
+            <ProductsModuleDataLayerBanner layer={productsModuleDataLayer} />
             <form id="categorie-create-form" onSubmit={submit} className={moduleFormSurfaceClassName()}>
                 <MemberAccountSelect
                     options={memberOwners}

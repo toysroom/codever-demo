@@ -1,11 +1,8 @@
 import {
     CreatedAtContent,
     DataTable,
-    DeleteButton,
-    EditButton,
-    ToggleActiveButton,
+    IndexTableRowActions,
     UpdatedAtContent,
-    ViewButton,
     type DataTablePagination,
 } from '@/components/custom';
 import { Button } from '@/components/ui/button';
@@ -76,9 +73,6 @@ export default function CustomerTypesIndex({ customerTypes, filters }: Props) {
     });
 
     const destroyRow = (id: number) => {
-        if (!confirm('Eliminare questo tipo cliente? I collegamenti con i clienti verranno rimossi.')) {
-            return;
-        }
         router.delete(route('modules.customers.customer-types.destroy', id), { preserveScroll: true });
     };
 
@@ -176,15 +170,23 @@ export default function CustomerTypesIndex({ customerTypes, filters }: Props) {
                 cellAlign: 'right',
                 sortable: false,
                 render: (_, row) => (
-                    <div className="flex justify-end gap-2">
-                        <ToggleActiveButton
-                            isActive={row.is_active !== false}
-                            onClick={() => toggleRow(row.id)}
-                        />
-                        <ViewButton href={route('modules.customers.customer-types.show', row.id)} />
-                        <EditButton href={route('modules.customers.customer-types.edit', row.id)} />
-                        <DeleteButton onClick={() => destroyRow(row.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        toggleActive={{
+                            isActive: row.is_active !== false,
+                            onClick: () => toggleRow(row.id),
+                        }}
+                        showHref={route('modules.customers.customer-types.show', row.id)}
+                        editHref={route('modules.customers.customer-types.edit', row.id)}
+                        onDelete={() => destroyRow(row.id)}
+                        deleteEntityLabel={row.name}
+                        deleteDescription={
+                            <>
+                                Eliminare definitivamente il tipo cliente{' '}
+                                <strong className="text-foreground">{row.name}</strong>? I collegamenti con i clienti
+                                verranno rimossi. L&apos;operazione non può essere annullata.
+                            </>
+                        }
+                    />
                 ),
             },
         );

@@ -38,7 +38,8 @@ class ProductCategoryController extends Controller
             'updated_at',
         ], 'sort_order');
 
-        $paginator = $this->categories->paginate($perPage, $sf, $sd);
+        $listRead = $this->categories->paginate($perPage, $sf, $sd);
+        $paginator = $listRead->paginator;
         $paginator->withQueryString();
 
         $paginator->setCollection(
@@ -68,6 +69,7 @@ class ProductCategoryController extends Controller
                 'sort_field' => $sf,
                 'sort_order' => $sd,
             ],
+            'productsModuleDataLayer' => $listRead->dataSource,
         ]);
     }
 
@@ -78,6 +80,7 @@ class ProductCategoryController extends Controller
         return Inertia::render('modules/products/categorie/create', [
             'memberOwners' => $this->memberOwnerOptions(),
             'parentOptions' => $this->parentCategoryOptions(),
+            'productsModuleDataLayer' => null,
         ]);
     }
 
@@ -94,13 +97,15 @@ class ProductCategoryController extends Controller
     {
         $this->authorize('view', $product_category);
 
-        $row = $this->categories->find($product_category->id);
-        if (! $row) {
+        $rowRead = $this->categories->find($product_category->id);
+        $row = $rowRead->model;
+        if (! $row instanceof ProductCategory) {
             abort(404);
         }
 
         return Inertia::render('modules/products/categorie/show', [
             'category' => $this->categoryPayload($row),
+            'productsModuleDataLayer' => $rowRead->dataSource,
         ]);
     }
 
@@ -108,8 +113,9 @@ class ProductCategoryController extends Controller
     {
         $this->authorize('update', $product_category);
 
-        $row = $this->categories->find($product_category->id);
-        if (! $row) {
+        $rowRead = $this->categories->find($product_category->id);
+        $row = $rowRead->model;
+        if (! $row instanceof ProductCategory) {
             abort(404);
         }
 
@@ -117,6 +123,7 @@ class ProductCategoryController extends Controller
             'category' => $this->categoryPayload($row),
             'memberOwners' => $this->memberOwnerOptions(),
             'parentOptions' => $this->parentCategoryOptions(exceptId: $product_category->id),
+            'productsModuleDataLayer' => $rowRead->dataSource,
         ]);
     }
 

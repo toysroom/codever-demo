@@ -50,6 +50,7 @@ class RoleSeeder extends Seeder
 
         $accountPermissions = [
             'dashboard.index',
+            'email_notifications.index',
             'customers.index',
             'customers.show',
             'customers.create',

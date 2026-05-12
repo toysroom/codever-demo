@@ -69,6 +69,9 @@ Route::middleware(['auth', 'verified', 'account.scope', 'module:products'])
     ->prefix('modules/products')
     ->name('modules.products.')
     ->group(function (): void {
+        Route::get('prodotti/{product}/change-history', [ProductController::class, 'changeHistory'])->name(
+            'prodotti.change-history',
+        );
         Route::resource('prodotti', ProductController::class)
             ->parameters(['prodotti' => 'product']);
         Route::post('prodotti/{product}/toggle-active', [ProductController::class, 'toggleActive'])->name('prodotti.toggle-active');

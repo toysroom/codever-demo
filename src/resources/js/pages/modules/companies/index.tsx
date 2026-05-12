@@ -1,4 +1,4 @@
-import { CreatedAtContent, DeleteButton, EditButton, UpdatedAtContent, ViewButton, DataTable, type DataTablePagination } from '@/components/custom';
+import { CreatedAtContent, DataTable, IndexTableRowActions, UpdatedAtContent, type DataTablePagination } from '@/components/custom';
 import { Button } from '@/components/ui/button';
 import { useDataTable, useFlashMessages } from '@/hooks';
 import AppLayout from '@/layouts/app-layout';
@@ -69,9 +69,6 @@ export default function CompaniesIndex({ companies, filters }: Props) {
     });
 
     const destroyRow = (id: number) => {
-        if (!confirm('Eliminare questa azienda?')) {
-            return;
-        }
         router.delete(route('modules.companies.destroy', id), { preserveScroll: true });
     };
 
@@ -167,11 +164,12 @@ export default function CompaniesIndex({ companies, filters }: Props) {
                 headerClassName: 'text-right',
                 cellAlign: 'right',
                 render: (_, c) => (
-                    <div className="flex justify-end gap-2">
-                        <ViewButton href={route('modules.companies.show', c.id)} />
-                        <EditButton href={route('modules.companies.edit', c.id)} />
-                        <DeleteButton onClick={() => destroyRow(c.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        showHref={route('modules.companies.show', c.id)}
+                        editHref={route('modules.companies.edit', c.id)}
+                        onDelete={() => destroyRow(c.id)}
+                        deleteEntityLabel={c.name}
+                    />
                 ),
             },
         );

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\EmailNotificationsController;
 use App\Http\Controllers\NotificationController;
 use App\Models\Company;
 use App\Models\Customer;
@@ -68,10 +69,29 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ]);
     })->name('dashboard');
 
-    Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])
+    Route::get('email-notifications', [EmailNotificationsController::class, 'index'])
+        ->middleware('permission:email_notifications.index')
+        ->name('email-notifications.index');
+    Route::post('email-notifications/logs/destroy-all', [EmailNotificationsController::class, 'destroyAllLogs'])
+        ->middleware('permission:email_notifications.index')
+        ->name('email-notifications.logs.destroy-all');
+
+    Route::get('email-notifications/inbox', [NotificationController::class, 'index'])
+        ->name('notifications.index');
+
+    Route::post('email-notifications/inbox/{notification}/read', [NotificationController::class, 'markRead'])
         ->name('notifications.read');
-    Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])
+    Route::post('email-notifications/inbox/read-all', [NotificationController::class, 'markAllRead'])
         ->name('notifications.read-all');
+    Route::post('email-notifications/inbox/destroy-all', [NotificationController::class, 'destroyAll'])
+        ->name('notifications.destroy-all');
+
+    Route::get('notifications', function (\Illuminate\Http\Request $request) {
+        return redirect()->route('notifications.index', $request->query());
+    });
+
+    Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead']);
+    Route::post('notifications/read-all', [NotificationController::class, 'markAllRead']);
 });
 
 require __DIR__.'/settings.php';

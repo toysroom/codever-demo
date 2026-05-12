@@ -2,12 +2,12 @@
 
 namespace App\Modules\Products\Contracts;
 
-use App\Models\PriceList;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use App\Modules\Products\Caching\ModelCacheReadResult;
+use App\Modules\Products\Caching\PaginatedCacheReadResult;
 
 interface PriceListRepositoryInterface
 {
-    public function paginate(int $perPage, string $sortField, string $sortOrder): LengthAwarePaginator;
+    public function paginate(int $perPage, string $sortField, string $sortOrder): PaginatedCacheReadResult;
 
-    public function find(int $id): ?PriceList;
+    public function find(int $id): ModelCacheReadResult;
 }

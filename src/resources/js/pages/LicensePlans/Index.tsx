@@ -1,11 +1,8 @@
 import {
     CreatedAtContent,
     DataTable,
-    DeleteButton,
-    EditButton,
-    ToggleActiveButton,
+    IndexTableRowActions,
     UpdatedAtContent,
-    ViewButton,
     type DataTablePagination,
 } from '@/components/custom';
 import { Button } from '@/components/ui/button';
@@ -93,9 +90,6 @@ export default function LicensePlansIndex({ plans, filters }: Props) {
     });
 
     const destroyPlan = (id: number) => {
-        if (!confirm('Eliminare questo piano licenza?')) {
-            return;
-        }
         router.delete(route('license-plans.destroy', id), { preserveScroll: true });
     };
 
@@ -228,12 +222,16 @@ export default function LicensePlansIndex({ plans, filters }: Props) {
                 cellAlign: 'right',
                 sortable: false,
                 render: (_, p) => (
-                    <div className="flex justify-end gap-2">
-                        <ToggleActiveButton isActive={p.is_active} onClick={() => togglePlanActive(p.id)} />
-                        <ViewButton href={route('license-plans.show', p.id)} />
-                        <EditButton href={route('license-plans.edit', p.id)} />
-                        <DeleteButton onClick={() => destroyPlan(p.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        toggleActive={{
+                            isActive: p.is_active,
+                            onClick: () => togglePlanActive(p.id),
+                        }}
+                        showHref={route('license-plans.show', p.id)}
+                        editHref={route('license-plans.edit', p.id)}
+                        onDelete={() => destroyPlan(p.id)}
+                        deleteEntityLabel={p.name}
+                    />
                 ),
             },
         ];

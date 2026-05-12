@@ -226,6 +226,15 @@ return [
                 'maxProcesses' => 3,
             ],
         ],
+
+        /*
+         * Fallback se APP_ENV non è production|local (es. docker, staging). Documentazione: environments wildcard.
+         */
+        '*' => [
+            'supervisor-1' => [
+                'maxProcesses' => 3,
+            ],
+        ],
     ],
 
     /*

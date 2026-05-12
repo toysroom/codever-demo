@@ -1,10 +1,8 @@
 import {
     CreatedAtContent,
-    DeleteButton,
-    EditButton,
-    UpdatedAtContent,
-    ViewButton,
     DataTable,
+    IndexTableRowActions,
+    UpdatedAtContent,
     type DataTablePagination,
 } from '@/components/custom';
 import { Button } from '@/components/ui/button';
@@ -68,9 +66,6 @@ export default function ServersIndex({ servers, filters }: Props) {
     });
 
     const destroyRow = (id: number) => {
-        if (!confirm('Eliminare questo server?')) {
-            return;
-        }
         router.delete(route('modules.web.servers.destroy', id), { preserveScroll: true });
     };
 
@@ -147,11 +142,12 @@ export default function ServersIndex({ servers, filters }: Props) {
                 headerClassName: 'text-right',
                 cellAlign: 'right',
                 render: (_, r) => (
-                    <div className="flex justify-end gap-2">
-                        <ViewButton href={route('modules.web.servers.show', r.id)} />
-                        <EditButton href={route('modules.web.servers.edit', r.id)} />
-                        <DeleteButton onClick={() => destroyRow(r.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        showHref={route('modules.web.servers.show', r.id)}
+                        editHref={route('modules.web.servers.edit', r.id)}
+                        onDelete={() => destroyRow(r.id)}
+                        deleteEntityLabel={r.label?.trim() ? r.label : r.host}
+                    />
                 ),
             },
         );

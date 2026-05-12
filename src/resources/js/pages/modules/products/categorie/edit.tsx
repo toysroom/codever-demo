@@ -1,4 +1,5 @@
 import { FormField, MemberAccountSelect, NativeSelect, StickyFormFooterActions } from '@/components/custom';
+import { ProductsModuleDataLayerBanner } from '@/components/domains/products/products-module-data-layer-banner';
 import { Input } from '@/components/ui/input';
 import CrudModulePageLayout from '@/layouts/crud-module-page-layout';
 import { moduleFormSurfaceClassName } from '@/lib/module-ui';
@@ -26,9 +27,10 @@ interface Props {
     category: CategoryEdit;
     memberOwners: MemberOwnerOption[];
     parentOptions: ParentOption[];
+    productsModuleDataLayer?: 'redis' | 'database' | null;
 }
 
-export default function CategoriesEdit({ category, memberOwners, parentOptions }: Props) {
+export default function CategoriesEdit({ category, memberOwners, parentOptions, productsModuleDataLayer }: Props) {
     const saveRedirectMode = useRef<'stay' | 'list'>('list');
 
     const { data, setData, put, processing, errors, transform } = useForm({
@@ -76,6 +78,7 @@ export default function CategoriesEdit({ category, memberOwners, parentOptions }
                 />
             }
         >
+            <ProductsModuleDataLayerBanner layer={productsModuleDataLayer} />
             <form id="categorie-edit-form" onSubmit={submit} className={moduleFormSurfaceClassName()}>
                 <MemberAccountSelect
                     options={memberOwners}

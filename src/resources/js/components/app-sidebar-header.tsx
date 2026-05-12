@@ -1,5 +1,6 @@
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import LanguageToggleDropdown from '@/components/language-toggle-dropdown';
+import { NotificationsDropdown } from '@/components/notifications-dropdown';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { type BreadcrumbItem as BreadcrumbItemType } from '@/types';
@@ -16,6 +17,7 @@ export function AppSidebarHeader({
                 <Breadcrumbs breadcrumbs={breadcrumbs} />
             </div>
             <div className="flex items-center gap-1">
+                <NotificationsDropdown />
                 <LanguageToggleDropdown />
                 <AppearanceToggleDropdown />
             </div>

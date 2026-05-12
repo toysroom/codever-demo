@@ -1,4 +1,6 @@
-import { FormField, MemberAccountSelect, NativeSelect, StickyFormFooterActions } from '@/components/custom';
+import { FormField, MemberAccountSelect, NativeSelect, StickyFormFooterActions, ToggleActiveButton } from '@/components/custom';
+import { ProductChangeHistoryDialog, type ProductChangeHistoryEntry } from '@/components/domains/products/product-change-history-dialog';
+import { ProductsModuleDataLayerBanner } from '@/components/domains/products/products-module-data-layer-banner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -6,7 +8,7 @@ import CrudModulePageLayout from '@/layouts/crud-module-page-layout';
 import { moduleFormSurfaceClassName } from '@/lib/module-ui';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem, type MemberOwnerOption } from '@/types';
-import { useForm } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
 import type { FormEvent } from 'react';
 import { useEffect, useRef } from 'react';
 import { route } from 'ziggy-js';
@@ -32,6 +34,7 @@ interface PricePayload {
 interface ProductEdit {
     id: number;
     member_id: number;
+    is_active: boolean;
     product_category_id: number | null;
     code: string;
     name: string;
@@ -47,9 +50,12 @@ interface ProductEdit {
 
 interface Props {
     product: ProductEdit;
+    productChangeHistory: ProductChangeHistoryEntry[];
+    productHasChangeHistory: boolean;
     memberOwners: MemberOwnerOption[];
     categoryOptions: CategoryOption[];
     priceListOptions: PriceListOption[];
+    productsModuleDataLayer?: 'redis' | 'database' | null;
 }
 
 function buildPrices(
@@ -68,9 +74,12 @@ function buildPrices(
 
 export default function ProductsEdit({
     product,
+    productChangeHistory,
+    productHasChangeHistory,
     memberOwners,
     categoryOptions,
     priceListOptions,
+    productsModuleDataLayer,
 }: Props) {
     const saveRedirectMode = useRef<'stay' | 'list'>('list');
 
@@ -126,9 +135,24 @@ export default function ProductsEdit({
                     disabled={processing}
                     onSaveStay={() => submitWithRedirect('stay')}
                     onSaveList={() => submitWithRedirect('list')}
+                    trailingStart={
+                        <>
+                            {productHasChangeHistory ? (
+                                <ProductChangeHistoryDialog entries={productChangeHistory} disabled={processing} />
+                            ) : null}
+                            <ToggleActiveButton
+                                isActive={product.is_active}
+                                disabled={processing}
+                                onClick={() =>
+                                    router.post(route('modules.products.prodotti.toggle-active', product.id))
+                                }
+                            />
+                        </>
+                    }
                 />
             }
         >
+            <ProductsModuleDataLayerBanner layer={productsModuleDataLayer} />
             <form id="prodotti-edit-form" onSubmit={submit} className={moduleFormSurfaceClassName()}>
                 <MemberAccountSelect
                     options={memberOwners}

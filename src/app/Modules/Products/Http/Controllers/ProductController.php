@@ -11,6 +11,8 @@ use App\Modules\Products\Contracts\ProductRepositoryInterface;
 use App\Modules\Products\Http\Requests\StoreProductRequest;
 use App\Modules\Products\Http\Requests\UpdateProductRequest;
 use App\Modules\Products\Services\ProductService;
+use App\Modules\Products\Support\ProductActivityHistoryPresenter;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -40,31 +42,44 @@ class ProductController extends Controller
             'updated_at',
         ], 'sort_order');
 
-        $paginator = $this->products->paginate($perPage, $sf, $sd);
+        $search = trim((string) $request->query('search', ''));
+        if (mb_strlen($search) > 255) {
+            $search = mb_substr($search, 0, 255);
+        }
+
+        $listRead = $this->products->paginate($perPage, $sf, $sd, $search !== '' ? $search : null);
+        $paginator = $listRead->paginator;
         $paginator->withQueryString();
 
+        $historySet = ProductActivityHistoryPresenter::productIdsHavingHistorySet(
+            $paginator->getCollection()->pluck('id')->all(),
+        );
+
         $paginator->setCollection(
-            $paginator->getCollection()->map(static fn (Product $p): array => [
-                'id' => $p->id,
-                'code' => $p->code,
-                'name' => $p->name,
-                'is_active' => (bool) $p->is_active,
-                'category' => $p->category ? ['id' => $p->category->id, 'name' => $p->category->name] : null,
-                'member' => $p->member
-                    ? [
-                        'id' => $p->member->id,
-                        'company_name' => $p->member->company_name,
-                    ]
-                    : null,
-                'prices' => $p->prices->map(static fn ($pr) => [
-                    'price_list_id' => $pr->price_list_id,
-                    'list_name' => $pr->priceList?->name,
-                    'currency' => $pr->priceList?->currency,
-                    'amount' => (string) $pr->amount,
-                ])->values()->all(),
-                'created_at' => $p->created_at?->toIso8601String(),
-                'updated_at' => $p->updated_at?->toIso8601String(),
-            ]),
+            $paginator->getCollection()->map(function (Product $p) use ($historySet): array {
+                return [
+                    'id' => $p->id,
+                    'code' => $p->code,
+                    'name' => $p->name,
+                    'is_active' => (bool) $p->is_active,
+                    'has_change_history' => isset($historySet[$p->id]),
+                    'category' => $p->category ? ['id' => $p->category->id, 'name' => $p->category->name] : null,
+                    'member' => $p->member
+                        ? [
+                            'id' => $p->member->id,
+                            'company_name' => $p->member->company_name,
+                        ]
+                        : null,
+                    'prices' => $p->prices->map(static fn ($pr) => [
+                        'price_list_id' => $pr->price_list_id,
+                        'list_name' => $pr->priceList?->name,
+                        'currency' => $pr->priceList?->currency,
+                        'amount' => (string) $pr->amount,
+                    ])->values()->all(),
+                    'created_at' => $p->created_at?->toIso8601String(),
+                    'updated_at' => $p->updated_at?->toIso8601String(),
+                ];
+            }),
         );
 
         return Inertia::render('modules/products/prodotti/index', [
@@ -75,7 +90,9 @@ class ProductController extends Controller
             'filters' => [
                 'sort_field' => $sf,
                 'sort_order' => $sd,
+                'search' => $search,
             ],
+            'productsModuleDataLayer' => $listRead->dataSource,
         ]);
     }
 
@@ -87,6 +104,7 @@ class ProductController extends Controller
             'memberOwners' => $this->memberOwnerOptions(),
             'categoryOptions' => $this->categoryOptions(),
             'priceListOptions' => $this->priceListOptions(),
+            'productsModuleDataLayer' => null,
         ]);
     }
 
@@ -103,13 +121,24 @@ class ProductController extends Controller
     {
         $this->authorize('view', $product);
 
-        $row = $this->products->find($product->id);
-        if (! $row) {
+        $rowRead = $this->products->find($product->id);
+        $row = $rowRead->model;
+        if (! $row instanceof Product) {
             abort(404);
         }
 
         return Inertia::render('modules/products/prodotti/show', [
             'product' => $this->productPayload($row),
+            'productsModuleDataLayer' => $rowRead->dataSource,
+        ]);
+    }
+
+    public function changeHistory(Product $product): JsonResponse
+    {
+        $this->authorize('view', $product);
+
+        return response()->json([
+            'entries' => ProductActivityHistoryPresenter::forProduct($product),
         ]);
     }
 
@@ -117,16 +146,20 @@ class ProductController extends Controller
     {
         $this->authorize('update', $product);
 
-        $row = $this->products->find($product->id);
-        if (! $row) {
+        $rowRead = $this->products->find($product->id);
+        $row = $rowRead->model;
+        if (! $row instanceof Product) {
             abort(404);
         }
 
         return Inertia::render('modules/products/prodotti/edit', [
             'product' => $this->productPayload($row),
+            'productChangeHistory' => ProductActivityHistoryPresenter::forProduct($row),
+            'productHasChangeHistory' => ProductActivityHistoryPresenter::shouldShowChangeHistoryIcon($row->id),
             'memberOwners' => $this->memberOwnerOptions(),
             'categoryOptions' => $this->categoryOptions(),
             'priceListOptions' => $this->priceListOptions(),
+            'productsModuleDataLayer' => $rowRead->dataSource,
         ]);
     }
 
@@ -165,7 +198,7 @@ class ProductController extends Controller
         $product->update(['is_active' => ! $product->is_active]);
 
         return redirect()
-            ->route('modules.products.prodotti.index')
+            ->back()
             ->with('success', __('Stato prodotto aggiornato.'));
     }
 

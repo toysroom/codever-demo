@@ -133,6 +133,14 @@
 }
 
 @layer base {
+    :root {
+        --environment-banner-height: 0px;
+    }
+
+    html:has([data-environment-banner]) {
+        --environment-banner-height: 2.25rem;
+    }
+
     * {
         @apply border-border;
     }

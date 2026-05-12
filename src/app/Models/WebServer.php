@@ -5,12 +5,13 @@ namespace App\Models;
 use App\Traits\BelongsToAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
 class WebServer extends Model
 {
-    use BelongsToAccount, LogsActivity;
+    use BelongsToAccount, LogsActivity, SoftDeletes;
 
     /**
      * @var array<int, string>

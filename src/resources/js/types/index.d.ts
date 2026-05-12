@@ -45,7 +45,8 @@ export type SidebarNavIcon =
     | 'warehouse'
     | 'server'
     | 'landmark'
-    | 'tags';
+    | 'tags'
+    | 'mail';
 
 export interface SidebarNavItem {
     title: string;
@@ -60,6 +61,58 @@ export interface SharedUiNav {
     anagrafiche?: string;
     /** Sezione collassabile modulo Web */
     web?: string;
+}
+
+export interface SharedUiNotificationsBell {
+    title: string;
+    mark_all_read: string;
+    empty_unread: string;
+}
+
+export interface SharedUiEmailNotificationsPage {
+    title: string;
+    description: string;
+    col_record: string;
+    col_type: string;
+    col_email_sent: string;
+    col_notification_sent: string;
+    col_recipient: string;
+    col_created: string;
+    empty: string;
+}
+
+export interface SharedUiEmailNotificationsTabs {
+    aria: string;
+    log: string;
+    inbox: string;
+    clear_all_logs_button: string;
+    clear_all_logs_button_short: string;
+    clear_all_logs_title: string;
+    clear_all_logs_description: string;
+    clear_all_inbox_button: string;
+    clear_all_inbox_button_short: string;
+    clear_all_inbox_title: string;
+    clear_all_inbox_description: string;
+    clear_all_confirm: string;
+    clear_all_cancel: string;
+}
+
+export interface SharedUiProductsModule {
+    didactic_title: string;
+    from_redis: string;
+    from_database: string;
+    strategy_hint: string;
+}
+
+export interface SharedUiNotificationsInboxPage {
+    title: string;
+    description: string;
+    empty: string;
+    read_label: string;
+    unread_label: string;
+    open_related: string;
+    page_label: string;
+    per_page_label: string;
 }
 
 export interface NotificationItem {
@@ -84,6 +137,11 @@ export interface SharedData {
     /** Etichette shell (sidebar) dalla locale Laravel */
     ui?: {
         nav: SharedUiNav;
+        notifications_bell?: SharedUiNotificationsBell;
+        email_notifications_page?: SharedUiEmailNotificationsPage;
+        email_notifications_tabs?: SharedUiEmailNotificationsTabs;
+        notifications_inbox_page?: SharedUiNotificationsInboxPage;
+        products_module?: SharedUiProductsModule;
     };
     availableLocales?: Record<string, string>;
     sidebarNavItems?: SidebarNavItem[];

@@ -61,6 +61,53 @@ class HandleInertiaRequests extends Middleware
                     'anagrafiche' => __('ui.nav.anagrafiche'),
                     'web' => __('ui.nav.web'),
                 ],
+                'notifications_bell' => [
+                    'title' => __('ui.notifications_bell.title'),
+                    'mark_all_read' => __('ui.notifications_bell.mark_all_read'),
+                    'empty_unread' => __('ui.notifications_bell.empty_unread'),
+                ],
+                'email_notifications_page' => [
+                    'title' => __('ui.email_notifications_page.title'),
+                    'description' => __('ui.email_notifications_page.description'),
+                    'col_record' => __('ui.email_notifications_page.col_record'),
+                    'col_type' => __('ui.email_notifications_page.col_type'),
+                    'col_email_sent' => __('ui.email_notifications_page.col_email_sent'),
+                    'col_notification_sent' => __('ui.email_notifications_page.col_notification_sent'),
+                    'col_recipient' => __('ui.email_notifications_page.col_recipient'),
+                    'col_created' => __('ui.email_notifications_page.col_created'),
+                    'empty' => __('ui.email_notifications_page.empty'),
+                ],
+                'email_notifications_tabs' => [
+                    'aria' => __('ui.email_notifications_tabs.aria'),
+                    'log' => __('ui.email_notifications_tabs.log'),
+                    'inbox' => __('ui.email_notifications_tabs.inbox'),
+                    'clear_all_logs_button' => __('ui.email_notifications_tabs.clear_all_logs_button'),
+                    'clear_all_logs_button_short' => __('ui.email_notifications_tabs.clear_all_logs_button_short'),
+                    'clear_all_logs_title' => __('ui.email_notifications_tabs.clear_all_logs_title'),
+                    'clear_all_logs_description' => __('ui.email_notifications_tabs.clear_all_logs_description'),
+                    'clear_all_inbox_button' => __('ui.email_notifications_tabs.clear_all_inbox_button'),
+                    'clear_all_inbox_button_short' => __('ui.email_notifications_tabs.clear_all_inbox_button_short'),
+                    'clear_all_inbox_title' => __('ui.email_notifications_tabs.clear_all_inbox_title'),
+                    'clear_all_inbox_description' => __('ui.email_notifications_tabs.clear_all_inbox_description'),
+                    'clear_all_confirm' => __('ui.email_notifications_tabs.clear_all_confirm'),
+                    'clear_all_cancel' => __('ui.email_notifications_tabs.clear_all_cancel'),
+                ],
+                'notifications_inbox_page' => [
+                    'title' => __('ui.notifications_inbox_page.title'),
+                    'description' => __('ui.notifications_inbox_page.description'),
+                    'empty' => __('ui.notifications_inbox_page.empty'),
+                    'read_label' => __('ui.notifications_inbox_page.read_label'),
+                    'unread_label' => __('ui.notifications_inbox_page.unread_label'),
+                    'open_related' => __('ui.notifications_inbox_page.open_related'),
+                    'page_label' => __('ui.notifications_inbox_page.page_label'),
+                    'per_page_label' => __('ui.notifications_inbox_page.per_page_label'),
+                ],
+                'products_module' => [
+                    'didactic_title' => __('ui.products_module.didactic_title'),
+                    'from_redis' => __('ui.products_module.from_redis'),
+                    'from_database' => __('ui.products_module.from_database'),
+                    'strategy_hint' => __('ui.products_module.strategy_hint'),
+                ],
             ],
             'availableLocales' => [
                 'it' => 'Italiano',
@@ -91,9 +138,9 @@ class HandleInertiaRequests extends Middleware
         }
 
         $unreadCount = $user->unreadNotifications()->count();
-        $items = $user->notifications()
+        $items = $user->unreadNotifications()
             ->latest()
-            ->limit(25)
+            ->limit(50)
             ->get()
             ->map(fn ($n) => [
                 'id' => (string) $n->id,
@@ -128,6 +175,14 @@ class HandleInertiaRequests extends Middleware
                 'title' => __('ui.sidebar.dashboard'),
                 'href' => route('dashboard'),
                 'icon' => 'layout-grid',
+            ];
+        }
+
+        if ($user->can('email_notifications.index')) {
+            $items[] = [
+                'title' => __('ui.sidebar.email_notifications'),
+                'href' => route('email-notifications.index'),
+                'icon' => 'mail',
             ];
         }
 

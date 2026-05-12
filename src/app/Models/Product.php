@@ -42,6 +42,7 @@ class Product extends Model
     {
         return LogOptions::defaults()
             ->logOnly([
+                'member_id',
                 'code',
                 'name',
                 'invoice_text',

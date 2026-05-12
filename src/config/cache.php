@@ -78,6 +78,21 @@ return [
             'lock_connection' => env('REDIS_CACHE_LOCK_CONNECTION', 'default'),
         ],
 
+        /*
+        |--------------------------------------------------------------------------
+        | Products module cache (Redis)
+        |--------------------------------------------------------------------------
+        |
+        | Store dedicato al modulo Prodotti: liste con strategia "bump" e
+        | dettagli con TTL. Usa PRODUCTS_CACHE_STORE in .env (default redis).
+        |
+        */
+        'products' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_CACHE_CONNECTION', 'cache'),
+            'lock_connection' => env('REDIS_CACHE_LOCK_CONNECTION', 'default'),
+        ],
+
         'dynamodb' => [
             'driver' => 'dynamodb',
             'key' => env('AWS_ACCESS_KEY_ID'),

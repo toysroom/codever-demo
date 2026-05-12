@@ -1,4 +1,4 @@
-import { CreatedAtContent, DeleteButton, EditButton, UpdatedAtContent, ViewButton, DataTable, type DataTablePagination } from '@/components/custom';
+import { CreatedAtContent, DataTable, IndexTableRowActions, UpdatedAtContent, type DataTablePagination } from '@/components/custom';
 import { WebDomainProbeButton } from '@/components/domains/web/web-domain-probe-button';
 import { Button } from '@/components/ui/button';
 import { useDataTable, useFlashMessages } from '@/hooks';
@@ -71,9 +71,6 @@ export default function DomainsIndex({ domains, filters }: Props) {
     });
 
     const destroyRow = (id: number) => {
-        if (!confirm('Eliminare questo dominio?')) {
-            return;
-        }
         router.delete(route('modules.web.domini.destroy', id), { preserveScroll: true });
     };
 
@@ -162,12 +159,13 @@ export default function DomainsIndex({ domains, filters }: Props) {
                 headerClassName: 'text-right',
                 cellAlign: 'right',
                 render: (_, row) => (
-                    <div className="flex flex-wrap justify-end gap-2">
-                        <WebDomainProbeButton domainId={row.id} hostname={row.hostname} />
-                        <ViewButton href={route('modules.web.domini.show', row.id)} />
-                        <EditButton href={route('modules.web.domini.edit', row.id)} />
-                        <DeleteButton onClick={() => destroyRow(row.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        leading={<WebDomainProbeButton domainId={row.id} hostname={row.hostname} />}
+                        showHref={route('modules.web.domini.show', row.id)}
+                        editHref={route('modules.web.domini.edit', row.id)}
+                        onDelete={() => destroyRow(row.id)}
+                        deleteEntityLabel={row.hostname}
+                    />
                 ),
             },
         );

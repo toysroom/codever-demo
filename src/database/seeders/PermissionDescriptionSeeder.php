@@ -14,6 +14,10 @@ class PermissionDescriptionSeeder extends Seeder
      * @var array<string, array{it: string, en: string}>
      */
     private const COPY = [
+        'email_notifications.index' => [
+            'it' => 'Consente di aprire lo storico email e notifiche inviate dopo le archiviazioni (soft delete) eseguite con il proprio account.',
+            'en' => 'Allows opening the email and in-app notification history for soft deletes performed with your account.',
+        ],
         'dashboard.index' => [
             'it' => 'Consente di aprire la dashboard principale dell’applicazione.',
             'en' => 'Allows opening the main application dashboard.',

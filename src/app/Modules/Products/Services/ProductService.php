@@ -17,7 +17,7 @@ class ProductService
     {
         $memberId = $this->assertMemberAccess($actor, (int) $data['member_id']);
 
-        return DB::transaction(function () use ($data, $memberId, $actor): Product {
+        return DB::transaction(function () use ($data, $memberId): Product {
             $categoryId = $this->resolveCategoryId($memberId, $data['product_category_id'] ?? null);
 
             $product = Product::query()->create([
@@ -35,12 +35,7 @@ class ProductService
                 'is_active' => true,
             ]);
 
-            $this->syncPricesForProduct($product, $data['prices'] ?? [], $actor);
-
-            activity()
-                ->performedOn($product)
-                ->causedBy($actor)
-                ->log('product.created');
+            $this->syncPricesForProduct($product, $data['prices'] ?? []);
 
             return $product->fresh(['prices.priceList', 'category']);
         });
@@ -50,7 +45,7 @@ class ProductService
     {
         $memberId = $this->assertMemberAccess($actor, (int) $data['member_id'], $product->member_id);
 
-        return DB::transaction(function () use ($product, $data, $memberId, $actor): Product {
+        return DB::transaction(function () use ($product, $data, $memberId): Product {
             $categoryId = $this->resolveCategoryId($memberId, $data['product_category_id'] ?? null);
 
             $product->update([
@@ -68,13 +63,8 @@ class ProductService
             ]);
 
             if (array_key_exists('prices', $data)) {
-                $this->syncPricesForProduct($product, $data['prices'] ?? [], $actor);
+                $this->syncPricesForProduct($product, $data['prices'] ?? []);
             }
-
-            activity()
-                ->performedOn($product)
-                ->causedBy($actor)
-                ->log('product.updated');
 
             return $product->fresh(['prices.priceList', 'category']);
         });
@@ -83,7 +73,10 @@ class ProductService
     public function delete(User $actor, Product $product): void
     {
         DB::transaction(function () use ($product, $actor): void {
-            $product->prices()->delete();
+            ProductPrice::withoutEvents(function () use ($product): void {
+                $product->prices()->delete();
+            });
+
             $product->delete();
 
             activity()
@@ -96,7 +89,7 @@ class ProductService
     /**
      * @param  list<array{price_list_id: int|string, amount: numeric-string|float|int}>  $rows
      */
-    protected function syncPricesForProduct(Product $product, array $rows, User $actor): void
+    protected function syncPricesForProduct(Product $product, array $rows): void
     {
         $listIds = PriceList::query()
             ->where('member_id', $product->member_id)
@@ -122,7 +115,11 @@ class ProductService
 
             $amount = $row['amount'] ?? null;
             if ($amount === null || $amount === '') {
-                ProductPrice::query()->where('product_id', $product->id)->where('price_list_id', $lid)->delete();
+                ProductPrice::query()
+                    ->where('product_id', $product->id)
+                    ->where('price_list_id', $lid)
+                    ->get()
+                    ->each(static fn (ProductPrice $rowModel): ?bool => $rowModel->delete());
 
                 continue;
             }
@@ -138,13 +135,6 @@ class ProductService
             );
         }
 
-        if ($seen !== []) {
-            activity()
-                ->performedOn($product)
-                ->causedBy($actor)
-                ->withProperties(['price_lists' => array_keys($seen)])
-                ->log('product.prices_synced');
-        }
     }
 
     protected function resolveCategoryId(int $memberId, mixed $categoryId): ?int

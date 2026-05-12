@@ -4,11 +4,7 @@ import {
     createCreatedAtColumn,
     createSpacerColumn,
     createUpdatedAtColumn,
-    DeleteButton,
-    DisabledDeleteButton,
-    EditButton,
-    ToggleActiveButton,
-    ViewButton,
+    IndexTableRowActions,
     type DataTableColumn,
 } from '@/components/custom';
 import { Button } from '@/components/ui/button';
@@ -135,22 +131,27 @@ export const getUserColumns = ({ visibleColumns, can, onDelete, onToggleActive }
     createActionsColumn<User>({
         visibleColumns,
         render: (user) => (
-            <>
-                {can.user_toggle_active && (
-                    <ToggleActiveButton
-                        isActive={Boolean(user.is_active ?? user.active)}
-                        onClick={() => onToggleActive(user)}
-                    />
-                )}
-                {can.user_show && <ViewButton href={route('users.show', user.id)} />}
-                {can.user_edit && <EditButton href={route('users.edit', user.id)} />}
-                {can.user_destroy &&
-                    (user.roles?.some((role) => role.name === 'admin') ? (
-                        <DisabledDeleteButton tooltip="Admin users cannot be deleted" />
-                    ) : (
-                        <DeleteButton onClick={() => onDelete(user)} entityName={user.name} />
-                    ))}
-            </>
+            <IndexTableRowActions
+                toggleActive={
+                    can.user_toggle_active
+                        ? {
+                              isActive: Boolean(user.is_active ?? user.active),
+                              onClick: () => onToggleActive(user),
+                          }
+                        : undefined
+                }
+                showHref={can.user_show ? route('users.show', user.id) : undefined}
+                editHref={can.user_edit ? route('users.edit', user.id) : undefined}
+                onDelete={() => onDelete(user)}
+                deleteEntityLabel={user.name}
+                deleteRequiresConfirmation={false}
+                canDelete={can.user_destroy}
+                deleteDisabled={
+                    user.roles?.some((role) => role.name === 'admin')
+                        ? { tooltip: 'Admin users cannot be deleted' }
+                        : undefined
+                }
+            />
         ),
     }),
 ];

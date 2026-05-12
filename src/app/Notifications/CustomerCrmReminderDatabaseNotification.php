@@ -37,7 +37,10 @@ class CustomerCrmReminderDatabaseNotification extends Notification implements Sh
             'customer_id' => $customer?->id,
             'customer_name' => $customer?->fullName(),
             'note_id' => $this->note->id,
-            'href' => $customer ? route('modules.customers.show', $customer) : null,
+            'href' => filled($this->id)
+                ? route('notifications.index', ['notification' => $this->id])
+                : route('notifications.index'),
+            'customer_href' => $customer ? route('modules.customers.show', $customer) : null,
         ];
     }
 }

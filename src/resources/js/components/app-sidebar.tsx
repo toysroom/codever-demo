@@ -18,7 +18,7 @@ import {
 import { dashboard } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { type InertiaLinkProps, Link, usePage } from '@inertiajs/react';
-import { Building2, Landmark, LayoutGrid, Users } from 'lucide-react';
+import { Building2, Landmark, LayoutGrid, Mail, Users } from 'lucide-react';
 import { useMemo } from 'react';
 import AppLogo from './app-logo';
 
@@ -27,6 +27,7 @@ const iconMap = {
     users: Users,
     'building-2': Building2,
     landmark: Landmark,
+    mail: Mail,
 } as const;
 
 export function AppSidebar() {

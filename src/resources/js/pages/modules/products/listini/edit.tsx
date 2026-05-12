@@ -1,4 +1,5 @@
 import { FormField, MemberAccountSelect, NativeSelect, StickyFormFooterActions } from '@/components/custom';
+import { ProductsModuleDataLayerBanner } from '@/components/domains/products/products-module-data-layer-banner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,9 +27,10 @@ interface PriceListEdit {
 interface Props {
     priceList: PriceListEdit;
     memberOwners: MemberOwnerOption[];
+    productsModuleDataLayer?: 'redis' | 'database' | null;
 }
 
-export default function PriceListsEdit({ priceList, memberOwners }: Props) {
+export default function PriceListsEdit({ priceList, memberOwners, productsModuleDataLayer }: Props) {
     const saveRedirectMode = useRef<'stay' | 'list'>('list');
 
     const { data, setData, put, processing, errors, transform } = useForm({
@@ -80,6 +82,7 @@ export default function PriceListsEdit({ priceList, memberOwners }: Props) {
                 />
             }
         >
+            <ProductsModuleDataLayerBanner layer={productsModuleDataLayer} />
             <form id="listini-edit-form" onSubmit={submit} className={moduleFormSurfaceClassName()}>
                 <MemberAccountSelect
                     options={memberOwners}

@@ -45,6 +45,7 @@
         @inertiaHead
     </head>
     <body class="font-sans antialiased">
+        @include('partials.environment-banner')
         @inertia
     </body>
 </html>

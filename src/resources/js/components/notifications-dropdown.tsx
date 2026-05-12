@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -16,29 +17,10 @@ import { format, parseISO } from 'date-fns';
 function NotificationRow({ item }: { item: NotificationItem }) {
     const title = item.data.title ?? 'Notifica';
     const body = item.data.body ?? '';
-    const href = item.data.href;
     const unread = !item.read_at;
 
     const open = () => {
-        if (unread) {
-            router.post(
-                route('notifications.read', item.id),
-                {},
-                {
-                    preserveScroll: true,
-                    onFinish: () => {
-                        if (href) {
-                            router.visit(href);
-                        }
-                    },
-                },
-            );
-
-            return;
-        }
-        if (href) {
-            router.visit(href);
-        }
+        router.visit(route('notifications.index', { notification: item.id }));
     };
 
     return (
@@ -55,33 +37,50 @@ function NotificationRow({ item }: { item: NotificationItem }) {
 export function NotificationsDropdown() {
     const page = usePage<SharedData>();
     const raw = page.props.notifications;
-    const unread = raw?.unread_count ?? 0;
+    const unreadCount = raw?.unread_count ?? 0;
     const items = raw?.items ?? [];
+    const t = page.props.ui?.notifications_bell ?? {};
+    const badgeLabel =
+        unreadCount > 99
+            ? '99+'
+            : String(unreadCount);
 
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative h-9 w-9 shrink-0" type="button" aria-label="Notifiche">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative h-9 w-9 shrink-0 overflow-visible"
+                    type="button"
+                    aria-label={
+                        unreadCount > 0 ? `${t.title ?? 'Notifiche'} (${unreadCount})` : (t.title ?? 'Notifiche')
+                    }
+                >
                     <Bell className="size-5" />
-                    {unread > 0 ? (
-                        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-destructive-foreground">
-                            {unread > 99 ? '99+' : unread}
-                        </span>
+                    {unreadCount > 0 ? (
+                        <Badge
+                            variant="destructive"
+                            className="pointer-events-none absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background px-1 py-0 text-[10px] font-semibold leading-none tabular-nums"
+                            aria-hidden
+                        >
+                            {badgeLabel}
+                        </Badge>
                     ) : null}
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80 sm:w-96">
                 <DropdownMenuLabel className="flex items-center justify-between gap-2">
-                    <span>Notifiche</span>
-                    {unread > 0 ? (
+                    <span>{t.title ?? 'Notifiche'}</span>
+                    {unreadCount > 0 ? (
                         <Button variant="ghost" size="sm" className="h-7 text-xs" type="button" onClick={() => router.post(route('notifications.read-all'), {}, { preserveScroll: true })}>
-                            Segna tutte lette
+                            {t.mark_all_read ?? 'Segna tutte lette'}
                         </Button>
                     ) : null}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {items.length === 0 ? (
-                    <div className="px-2 py-6 text-center text-sm text-muted-foreground">Nessuna notifica</div>
+                    <div className="text-muted-foreground px-2 py-6 text-center text-sm">{t.empty_unread ?? 'Nessuna notifica da leggere'}</div>
                 ) : (
                     <div className="max-h-80 overflow-y-auto">
                         {items.map((item) => (

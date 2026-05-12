@@ -35,7 +35,7 @@ export default function CrudModulePageLayout({
               Altezza viewport meno header app (h-16): senza questo il main cresce col contenuto e la sticky bar
               di EntityPageChrome finisce sotto lo scroll della finestra (es. show dominio con JSON lungo).
             */}
-            <div className="flex h-[calc(100svh-4rem)] max-h-[calc(100svh-4rem)] w-full min-h-0 flex-col overflow-hidden">
+            <div className="flex h-[calc(100svh-4rem-var(--environment-banner-height))] max-h-[calc(100svh-4rem-var(--environment-banner-height))] w-full min-h-0 flex-col overflow-hidden">
                 <EntityPageChrome
                     processing={processing}
                     loadingMessage={loadingMessage}

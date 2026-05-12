@@ -1,4 +1,5 @@
 import { FormField, MemberAccountSelect, NativeSelect, StickyReadFooterActions } from '@/components/custom';
+import { ProductsModuleDataLayerBanner } from '@/components/domains/products/products-module-data-layer-banner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,9 +14,10 @@ import { route } from 'ziggy-js';
 
 interface Props {
     memberOwners: MemberOwnerOption[];
+    productsModuleDataLayer?: 'redis' | 'database' | null;
 }
 
-export default function PriceListsCreate({ memberOwners }: Props) {
+export default function PriceListsCreate({ memberOwners, productsModuleDataLayer }: Props) {
     const m0 = memberOwners[0]?.id ?? 0;
 
     const { data, setData, post, processing, errors } = useForm({
@@ -54,6 +56,7 @@ export default function PriceListsCreate({ memberOwners }: Props) {
                 </StickyReadFooterActions>
             }
         >
+            <ProductsModuleDataLayerBanner layer={productsModuleDataLayer} />
             <form id="listini-create-form" onSubmit={submit} className={moduleFormSurfaceClassName()}>
                 <MemberAccountSelect
                     options={memberOwners}

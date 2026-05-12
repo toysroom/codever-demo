@@ -1,12 +1,9 @@
 import {
     CreatedAtContent,
     DataTable,
-    DeleteButton,
-    EditButton,
+    IndexTableRowActions,
     SearchInput,
-    ToggleActiveButton,
     UpdatedAtContent,
-    ViewButton,
     PageHeaderActions,
     type DataTablePagination,
 } from '@/components/custom';
@@ -86,9 +83,6 @@ export default function AccountsIndex({ accounts, filters }: Props) {
     });
 
     const destroyAccount = (id: number) => {
-        if (!confirm('Eliminare questo account e il suo utente owner?')) {
-            return;
-        }
         router.delete(route('accounts.destroy', id), { preserveScroll: true });
     };
 
@@ -199,12 +193,23 @@ export default function AccountsIndex({ accounts, filters }: Props) {
                 cellAlign: 'right',
                 sortable: false,
                 render: (_, t) => (
-                    <div className="flex justify-end gap-2">
-                        <ToggleActiveButton isActive={t.user.is_active} onClick={() => toggleOwnerActive(t.id)} />
-                        <ViewButton href={route('accounts.show', t.id)} />
-                        <EditButton href={route('accounts.edit', t.id)} />
-                        <DeleteButton onClick={() => destroyAccount(t.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        toggleActive={{
+                            isActive: t.user.is_active,
+                            onClick: () => toggleOwnerActive(t.id),
+                        }}
+                        showHref={route('accounts.show', t.id)}
+                        editHref={route('accounts.edit', t.id)}
+                        onDelete={() => destroyAccount(t.id)}
+                        deleteEntityLabel={t.company_name ?? t.user.name}
+                        deleteDescription={
+                            <>
+                                Eliminare definitivamente l&apos;account{' '}
+                                <strong className="text-foreground">{t.company_name ?? t.user.name}</strong> e il suo
+                                utente owner? L&apos;operazione non può essere annullata.
+                            </>
+                        }
+                    />
                 ),
             },
         ];

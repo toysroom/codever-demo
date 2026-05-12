@@ -1,22 +1,97 @@
 import {
     CreatedAtContent,
     DataTable,
-    DeleteButton,
-    EditButton,
-    ToggleActiveButton,
+    IndexTableRowActions,
+    PageHeaderActions,
     UpdatedAtContent,
-    ViewButton,
     type DataTablePagination,
 } from '@/components/custom';
+import { ProductsModuleDataLayerBanner } from '@/components/domains/products/products-module-data-layer-banner';
+import { ProductChangeHistoryDialog } from '@/components/domains/products/product-change-history-dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useDataTable, useFlashMessages } from '@/hooks';
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import type { BreadcrumbItem, DataTableColumn, SharedData } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
-import { useMemo } from 'react';
+import { Plus, Search } from 'lucide-react';
+import { type FormEventHandler, type ReactNode, useMemo, useState } from 'react';
 import { route } from 'ziggy-js';
+
+function ProductsSearchForm({
+    appliedSearch,
+    onApply,
+}: {
+    appliedSearch: string;
+    onApply: (trimmed: string) => void;
+}) {
+    const [draftSearch, setDraftSearch] = useState(appliedSearch);
+
+    const submitSearch: FormEventHandler<HTMLFormElement> = (e) => {
+        e.preventDefault();
+        onApply(draftSearch.trim());
+    };
+
+    return (
+        <form className="w-full sm:max-w-lg" onSubmit={submitSearch}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                <div className="relative min-w-0 grow">
+                    <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                    <Input
+                        type="search"
+                        value={draftSearch}
+                        onChange={(e) => setDraftSearch(e.target.value)}
+                        placeholder="Codice o nome prodotto…"
+                        className="pl-9"
+                        name="search"
+                        autoComplete="off"
+                    />
+                </div>
+                <Button type="submit" className="shrink-0 sm:w-auto">
+                    Cerca
+                </Button>
+            </div>
+            <p className="text-muted-foreground mt-1 text-xs">
+                La ricerca è sul server (codice e nome). Dopo aver premuto Cerca, le corrispondenze sono evidenziate in giallo in tabella.
+            </p>
+        </form>
+    );
+}
+
+function highlightProductField(text: string, needle: string): ReactNode {
+    const q = needle.trim();
+    if (!q) {
+        return text;
+    }
+    const lower = text.toLowerCase();
+    const qLower = q.toLowerCase();
+    const segments: ReactNode[] = [];
+    let pos = 0;
+    let key = 0;
+    while (pos < text.length) {
+        const found = lower.indexOf(qLower, pos);
+        if (found === -1) {
+            segments.push(text.slice(pos));
+            break;
+        }
+        if (found > pos) {
+            segments.push(text.slice(pos, found));
+        }
+        const matchEnd = found + q.length;
+        segments.push(
+            <mark
+                key={`hl-${key}`}
+                className="rounded-sm bg-yellow-200 px-0.5 text-inherit dark:bg-yellow-900/55"
+            >
+                {text.slice(found, matchEnd)}
+            </mark>,
+        );
+        key += 1;
+        pos = matchEnd;
+    }
+    return segments.length > 0 ? <>{segments}</> : text;
+}
 
 interface MemberSummary {
     id: number;
@@ -35,6 +110,7 @@ interface ProductRow {
     code: string;
     name: string;
     is_active?: boolean;
+    has_change_history?: boolean;
     category?: { id: number; name: string } | null;
     member?: MemberSummary | null;
     prices: PriceRow[];
@@ -50,7 +126,9 @@ interface Props {
     filters: {
         sort_field: string;
         sort_order: string;
+        search: string;
     };
+    productsModuleDataLayer?: 'redis' | 'database' | null;
 }
 
 function priceSummary(prices: PriceRow[]): string {
@@ -60,7 +138,7 @@ function priceSummary(prices: PriceRow[]): string {
     return prices.map((p) => `${p.list_name ?? '#'}: ${p.amount} ${p.currency ?? ''}`).join('; ');
 }
 
-export default function ProductsIndex({ products, filters }: Props) {
+export default function ProductsIndex({ products, filters, productsModuleDataLayer }: Props) {
     const page = usePage<SharedData>();
     const isAdmin = page.props.auth?.user?.user_type === 'admin';
     useFlashMessages();
@@ -90,9 +168,6 @@ export default function ProductsIndex({ products, filters }: Props) {
     });
 
     const destroyRow = (id: number) => {
-        if (!confirm('Eliminare questo prodotto?')) {
-            return;
-        }
         router.delete(route('modules.products.prodotti.destroy', id), { preserveScroll: true });
     };
 
@@ -122,14 +197,14 @@ export default function ProductsIndex({ products, filters }: Props) {
                 visible: vis.code !== false,
                 sortable: true,
                 cellClassName: 'font-mono text-xs',
-                render: (_, row) => row.code,
+                render: (_, row) => highlightProductField(row.code, state.search),
             },
             {
                 key: 'name',
                 label: 'Nome',
                 visible: vis.name !== false,
                 sortable: true,
-                render: (_, row) => row.name,
+                render: (_, row) => highlightProductField(row.name, state.search),
             },
             {
                 key: 'category',
@@ -193,26 +268,35 @@ export default function ProductsIndex({ products, filters }: Props) {
                 cellAlign: 'right',
                 sortable: false,
                 render: (_, row) => (
-                    <div className="flex justify-end gap-2">
-                        <ToggleActiveButton
-                            isActive={row.is_active !== false}
-                            onClick={() => toggleRow(row.id)}
-                        />
-                        <ViewButton href={route('modules.products.prodotti.show', row.id)} />
-                        <EditButton href={route('modules.products.prodotti.edit', row.id)} />
-                        <DeleteButton onClick={() => destroyRow(row.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        leading={
+                            row.has_change_history ? (
+                                <ProductChangeHistoryDialog
+                                    fetchUrl={route('modules.products.prodotti.change-history', row.id)}
+                                />
+                            ) : null
+                        }
+                        toggleActive={{
+                            isActive: row.is_active !== false,
+                            onClick: () => toggleRow(row.id),
+                        }}
+                        showHref={route('modules.products.prodotti.show', row.id)}
+                        editHref={route('modules.products.prodotti.edit', row.id)}
+                        onDelete={() => destroyRow(row.id)}
+                        deleteEntityLabel={row.code ? `${row.name} (${row.code})` : row.name}
+                    />
                 ),
             },
         );
 
         return cols;
-    }, [isAdmin, state.visibleColumns]);
+    }, [isAdmin, state.visibleColumns, state.search]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Prodotti" />
             <div className="flex flex-col gap-4 p-4">
+                <ProductsModuleDataLayerBanner layer={productsModuleDataLayer} />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <h1 className="text-xl font-semibold tracking-tight">Catalogo prodotti</h1>
                     <Button asChild>
@@ -222,6 +306,15 @@ export default function ProductsIndex({ products, filters }: Props) {
                         </Link>
                     </Button>
                 </div>
+                <PageHeaderActions>
+                    <ProductsSearchForm
+                        key={`applied:${filters.search}`}
+                        appliedSearch={filters.search ?? ''}
+                        onApply={(trimmed) => {
+                            handlers.handleSearch(trimmed);
+                        }}
+                    />
+                </PageHeaderActions>
                 <DataTable
                     data={products.data}
                     columns={columns}

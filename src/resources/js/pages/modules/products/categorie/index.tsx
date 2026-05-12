@@ -1,13 +1,11 @@
 import {
     CreatedAtContent,
     DataTable,
-    DeleteButton,
-    EditButton,
-    ToggleActiveButton,
+    IndexTableRowActions,
     UpdatedAtContent,
-    ViewButton,
     type DataTablePagination,
 } from '@/components/custom';
+import { ProductsModuleDataLayerBanner } from '@/components/domains/products/products-module-data-layer-banner';
 import { Button } from '@/components/ui/button';
 import { useDataTable, useFlashMessages } from '@/hooks';
 import AppLayout from '@/layouts/app-layout';
@@ -43,9 +41,10 @@ interface Props {
         sort_field: string;
         sort_order: string;
     };
+    productsModuleDataLayer?: 'redis' | 'database' | null;
 }
 
-export default function CategoriesIndex({ categories, filters }: Props) {
+export default function CategoriesIndex({ categories, filters, productsModuleDataLayer }: Props) {
     const page = usePage<SharedData>();
     const isAdmin = page.props.auth?.user?.user_type === 'admin';
     useFlashMessages();
@@ -74,9 +73,6 @@ export default function CategoriesIndex({ categories, filters }: Props) {
     });
 
     const destroyRow = (id: number) => {
-        if (!confirm('Eliminare questa categoria?')) {
-            return;
-        }
         router.delete(route('modules.products.categorie.destroy', id), { preserveScroll: true });
     };
 
@@ -167,15 +163,16 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                 cellAlign: 'right',
                 sortable: false,
                 render: (_, row) => (
-                    <div className="flex justify-end gap-2">
-                        <ToggleActiveButton
-                            isActive={row.is_active !== false}
-                            onClick={() => toggleRow(row.id)}
-                        />
-                        <ViewButton href={route('modules.products.categorie.show', row.id)} />
-                        <EditButton href={route('modules.products.categorie.edit', row.id)} />
-                        <DeleteButton onClick={() => destroyRow(row.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        toggleActive={{
+                            isActive: row.is_active !== false,
+                            onClick: () => toggleRow(row.id),
+                        }}
+                        showHref={route('modules.products.categorie.show', row.id)}
+                        editHref={route('modules.products.categorie.edit', row.id)}
+                        onDelete={() => destroyRow(row.id)}
+                        deleteEntityLabel={row.name}
+                    />
                 ),
             },
         );
@@ -187,6 +184,7 @@ export default function CategoriesIndex({ categories, filters }: Props) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Categorie prodotto" />
             <div className="flex flex-col gap-4 p-4">
+                <ProductsModuleDataLayerBanner layer={productsModuleDataLayer} />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <h1 className="text-xl font-semibold tracking-tight">Categorie prodotto</h1>
                     <Button asChild>

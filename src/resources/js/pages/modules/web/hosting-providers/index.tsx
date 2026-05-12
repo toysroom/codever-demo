@@ -1,12 +1,4 @@
-import {
-    CreatedAtContent,
-    DeleteButton,
-    EditButton,
-    UpdatedAtContent,
-    ViewButton,
-    DataTable,
-    type DataTablePagination,
-} from '@/components/custom';
+import { CreatedAtContent, DataTable, IndexTableRowActions, UpdatedAtContent, type DataTablePagination } from '@/components/custom';
 import { Button } from '@/components/ui/button';
 import { useDataTable, useFlashMessages } from '@/hooks';
 import AppLayout from '@/layouts/app-layout';
@@ -64,9 +56,6 @@ export default function HostingProvidersIndex({ providers, filters }: Props) {
     });
 
     const destroyRow = (id: number) => {
-        if (!confirm('Eliminare questo fornitore? (Bloccato se ancora usato da server.)')) {
-            return;
-        }
         router.delete(route('modules.web.hosting-providers.destroy', id), { preserveScroll: true });
     };
 
@@ -139,11 +128,12 @@ export default function HostingProvidersIndex({ providers, filters }: Props) {
                 cellAlign: 'right',
                 sortable: false,
                 render: (_, r) => (
-                    <div className="flex justify-end gap-2">
-                        <ViewButton href={route('modules.web.hosting-providers.show', r.id)} />
-                        <EditButton href={route('modules.web.hosting-providers.edit', r.id)} />
-                        <DeleteButton onClick={() => destroyRow(r.id)} />
-                    </div>
+                    <IndexTableRowActions
+                        showHref={route('modules.web.hosting-providers.show', r.id)}
+                        editHref={route('modules.web.hosting-providers.edit', r.id)}
+                        onDelete={() => destroyRow(r.id)}
+                        deleteEntityLabel={r.name}
+                    />
                 ),
             },
         ];

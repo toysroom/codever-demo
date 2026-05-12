@@ -4,12 +4,8 @@ import {
     createCreatedAtColumn,
     createSpacerColumn,
     createUpdatedAtColumn,
-    DeleteButton,
-    DisabledDeleteButton,
-    EditButton,
+    IndexTableRowActions,
     parseTruthyFlag,
-    ToggleActiveButton,
-    ViewButton,
     type DataTableColumn,
 } from '@/components/custom';
 import { Role } from '@/types';
@@ -127,25 +123,30 @@ export const getRoleColumns = ({
                 ? 'Deleting this role is disabled'
                 : 'System roles (admin, customer) cannot be deleted';
 
+            const deleteDisabledState =
+                deleteDisabled || !can.role_destroy
+                    ? { tooltip: deleteTooltip }
+                    : undefined;
+
             return (
-                <>
-                    {can.role_toggle_active && (
-                        <ToggleActiveButton
-                            isActive={Boolean(role.is_active ?? role.active)}
-                            onClick={() => onToggleActive(role)}
-                            disabled={isToggleLocked(role)}
-                            disabledTooltip="This role cannot change its status"
-                        />
-                    )}
-                    {can.role_show && <ViewButton href={route('roles.show', role.id)} />}
-                    {can.role_edit && <EditButton href={route('roles.edit', role.id)} />}
-                    {can.role_destroy &&
-                        (deleteDisabled ? (
-                            <DisabledDeleteButton tooltip={deleteTooltip} />
-                        ) : (
-                            <DeleteButton onClick={() => onDelete(role)} />
-                        ))}
-                </>
+                <IndexTableRowActions
+                    toggleActive={
+                        can.role_toggle_active
+                            ? {
+                                  isActive: Boolean(role.is_active ?? role.active),
+                                  onClick: () => onToggleActive(role),
+                                  disabled: isToggleLocked(role),
+                                  disabledTooltip: 'This role cannot change its status',
+                              }
+                            : undefined
+                    }
+                    showHref={can.role_show ? route('roles.show', role.id) : undefined}
+                    editHref={can.role_edit ? route('roles.edit', role.id) : undefined}
+                    onDelete={() => onDelete(role)}
+                    deleteRequiresConfirmation={false}
+                    canDelete={can.role_destroy}
+                    deleteDisabled={deleteDisabledState}
+                />
             );
         },
     }),

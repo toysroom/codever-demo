@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { StickyReadFooterActions } from '@/components/custom';
+import { ProductsModuleDataLayerBanner } from '@/components/domains/products/products-module-data-layer-banner';
 import CrudModulePageLayout from '@/layouts/crud-module-page-layout';
 import { entityReadonlyCardClassName } from '@/lib/module-ui';
 import { dashboard } from '@/routes';
@@ -21,9 +22,10 @@ interface PriceListShow {
 
 interface Props {
     priceList: PriceListShow;
+    productsModuleDataLayer?: 'redis' | 'database' | null;
 }
 
-export default function PriceListsShow({ priceList }: Props) {
+export default function PriceListsShow({ priceList, productsModuleDataLayer }: Props) {
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Dashboard', href: dashboard().url },
         { title: 'Listini', href: route('modules.products.listini.index') },
@@ -43,6 +45,7 @@ export default function PriceListsShow({ priceList }: Props) {
                 </StickyReadFooterActions>
             }
         >
+            <ProductsModuleDataLayerBanner layer={productsModuleDataLayer} />
             <dl className={entityReadonlyCardClassName('grid w-full gap-3 p-6 text-sm')}>
                 {priceList.member_label ? (
                     <>

@@ -1,4 +1,5 @@
 import { FormField, MemberAccountSelect, NativeSelect, StickyReadFooterActions } from '@/components/custom';
+import { ProductsModuleDataLayerBanner } from '@/components/domains/products/products-module-data-layer-banner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +29,7 @@ interface Props {
     memberOwners: MemberOwnerOption[];
     categoryOptions: CategoryOption[];
     priceListOptions: PriceListOption[];
+    productsModuleDataLayer?: 'redis' | 'database' | null;
 }
 
 function buildPrices(memberId: number, options: PriceListOption[]) {
@@ -40,6 +42,7 @@ export default function ProductsCreate({
     memberOwners,
     categoryOptions,
     priceListOptions,
+    productsModuleDataLayer,
 }: Props) {
     const m0 = memberOwners[0]?.id ?? 0;
 
@@ -85,6 +88,7 @@ export default function ProductsCreate({
                 </StickyReadFooterActions>
             }
         >
+            <ProductsModuleDataLayerBanner layer={productsModuleDataLayer} />
             <form id="prodotti-create-form" onSubmit={submit} className={moduleFormSurfaceClassName()}>
                 <MemberAccountSelect
                     options={memberOwners}
